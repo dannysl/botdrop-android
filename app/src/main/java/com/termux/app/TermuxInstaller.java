@@ -421,6 +421,7 @@ final class TermuxInstaller {
                 "# This script runs once on first terminal session after bootstrap installation\n\n" +
                 "OWLIA_FIRST_RUN_MARKER=\"$HOME/.owlia_first_run_done\"\n\n" +
                 "if [ ! -f \"$OWLIA_FIRST_RUN_MARKER\" ]; then\n" +
+                "    OWLIA_SETUP_OK=1\n\n" +
                 "    echo \"\\U0001F989 Welcome to Owlia!\"\n" +
                 "    echo \"\"\n" +
                 "    echo \"Setting up your environment...\"\n" +
@@ -430,21 +431,44 @@ final class TermuxInstaller {
                 "        termux-wake-lock\n" +
                 "        echo \"✓ Wake lock enabled\"\n" +
                 "    fi\n\n" +
+                "    # Fix any broken dependencies from bootstrap\n" +
+                "    apt --fix-broken install -y 2>/dev/null\n\n" +
                 "    # Set up a reliable mirror and update package lists\n" +
                 "    echo \"Updating package lists...\"\n" +
                 "    sed -i 's|^\\(deb.*\\)|#\\1|' $PREFIX/etc/apt/sources.list 2>/dev/null\n" +
                 "    echo 'deb https://packages.termux.dev/apt/termux-main stable main' >> $PREFIX/etc/apt/sources.list\n" +
                 "    pkg update -y && echo \"✓ Packages updated\" || echo \"✗ Package update failed\"\n\n" +
-                "    # Install required packages: nodejs-lts, npm, and proot for /tmp support\n" +
-                "    echo \"Installing required packages...\"\n" +
-                "    pkg install nodejs-lts npm proot -y && echo \"✓ Packages installed\" || echo \"✗ Package installation failed\"\n\n" +
+                "    # Ensure required packages are installed (nodejs-lts includes npm, proot for /tmp)\n" +
+                "    echo \"Checking required packages...\"\n" +
+                "    apt --fix-broken install -y 2>/dev/null\n" +
+                "    pkg install nodejs-lts proot -y && echo \"✓ Packages ready\" || {\n" +
+                "        echo \"✗ Package installation failed\"\n" +
+                "        OWLIA_SETUP_OK=0\n" +
+                "    }\n\n" +
+                "    # Verify npm is available\n" +
+                "    if ! command -v npm >/dev/null 2>&1; then\n" +
+                "        echo \"✗ npm not found. Try: pkg install nodejs-lts\"\n" +
+                "        OWLIA_SETUP_OK=0\n" +
+                "    fi\n\n" +
                 "    # Install OpenClaw (--ignore-scripts to skip native compilation)\n" +
-                "    echo \"Installing OpenClaw...\"\n" +
-                "    npm install -g openclaw@latest --ignore-scripts && echo \"✓ OpenClaw installed successfully\" || echo \"✗ OpenClaw installation failed\"\n\n" +
-                "    # Mark first run as complete\n" +
-                "    touch \"$OWLIA_FIRST_RUN_MARKER\"\n" +
+                "    if [ $OWLIA_SETUP_OK -eq 1 ]; then\n" +
+                "        echo \"Installing OpenClaw...\"\n" +
+                "        npm install -g openclaw@latest --ignore-scripts && echo \"✓ OpenClaw installed\" || {\n" +
+                "            echo \"✗ OpenClaw installation failed\"\n" +
+                "            OWLIA_SETUP_OK=0\n" +
+                "        }\n" +
+                "    fi\n\n" +
                 "    echo \"\"\n" +
-                "    echo \"\\U0001F989 Setup complete! Run 'openclaw' to get started.\"\n" +
+                "    if [ $OWLIA_SETUP_OK -eq 1 ]; then\n" +
+                "        touch \"$OWLIA_FIRST_RUN_MARKER\"\n" +
+                "        echo \"\\U0001F989 Setup complete! Run 'openclaw onboard' to get started.\"\n" +
+                "    else\n" +
+                "        echo \"\\U0001F989 Setup incomplete. Fix the errors above, then run:\"\n" +
+                "        echo \"  apt --fix-broken install -y && pkg install nodejs-lts proot -y\"\n" +
+                "        echo \"  npm install -g openclaw@latest --ignore-scripts\"\n" +
+                "        echo \"\"\n" +
+                "        echo \"Then restart Owlia to retry setup.\"\n" +
+                "    fi\n" +
                 "    echo \"\"\n" +
                 "fi\n";
 
