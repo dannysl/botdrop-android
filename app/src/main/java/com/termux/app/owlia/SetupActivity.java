@@ -126,8 +126,7 @@ public class SetupActivity extends AppCompatActivity {
                 case STEP_API_KEY:
                     return new AuthFragment();
                 case STEP_CHANNEL:
-                    return new PlaceholderFragment("Channel Setup",
-                        "This step will connect to Telegram/Discord.\n\n(To be implemented in GUI-M2)");
+                    return new ChannelFragment();
                 default:
                     throw new IllegalArgumentException("Invalid step: " + position);
             }

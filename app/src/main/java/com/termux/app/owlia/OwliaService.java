@@ -228,4 +228,32 @@ public class OwliaService extends Service {
     public static boolean isOpenclawConfigured() {
         return new java.io.File(TermuxConstants.TERMUX_HOME_DIR_PATH + "/.config/openclaw/openclaw.json").exists();
     }
+
+    /**
+     * Start the OpenClaw gateway
+     */
+    public void startGateway(CommandCallback callback) {
+        executeCommand("openclaw gateway start", callback);
+    }
+
+    /**
+     * Stop the OpenClaw gateway
+     */
+    public void stopGateway(CommandCallback callback) {
+        executeCommand("openclaw gateway stop", callback);
+    }
+
+    /**
+     * Restart the OpenClaw gateway
+     */
+    public void restartGateway(CommandCallback callback) {
+        executeCommand("openclaw gateway restart", callback);
+    }
+
+    /**
+     * Get the OpenClaw gateway status
+     */
+    public void getGatewayStatus(CommandCallback callback) {
+        executeCommand("openclaw gateway status", callback);
+    }
 }

@@ -14,6 +14,8 @@ import com.termux.app.TermuxActivity;
 import com.termux.app.TermuxInstaller;
 import com.termux.shared.logger.Logger;
 
+import org.json.JSONObject;
+
 /**
  * Launcher activity that routes to the appropriate screen based on installation state.
  *
@@ -75,6 +77,18 @@ public class OwliaLauncherActivity extends Activity {
             return;
         }
 
+        // Check 4: Channel configured?
+        if (!hasChannelConfigured()) {
+            Logger.logInfo(LOG_TAG, "No channel configured, routing to channel setup");
+            mStatusText.setText("Channel setup required...");
+
+            Intent intent = new Intent(this, SetupActivity.class);
+            intent.putExtra(SetupActivity.EXTRA_START_STEP, SetupActivity.STEP_CHANNEL);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
         // All ready - for now, go to TermuxActivity (DashboardActivity will be implemented later)
         Logger.logInfo(LOG_TAG, "All ready, routing to main activity");
         mStatusText.setText("Starting...");
@@ -83,5 +97,23 @@ public class OwliaLauncherActivity extends Activity {
         Intent intent = new Intent(this, TermuxActivity.class);
         startActivity(intent);
         finish();
+    }
+
+    /**
+     * Check if a channel is configured
+     */
+    private boolean hasChannelConfigured() {
+        try {
+            JSONObject config = OwliaConfig.readConfig();
+            if (config.has("channels")) {
+                JSONObject channels = config.getJSONObject("channels");
+                // Check if either telegram or discord is configured
+                return channels.has("telegram") || channels.has("discord");
+            }
+            return false;
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to check channel config: " + e.getMessage());
+            return false;
+        }
     }
 }
