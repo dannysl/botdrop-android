@@ -157,13 +157,17 @@ public class OwliaService extends Service {
      * 2 - Install OpenClaw via npm
      */
     public void installOpenclaw(InstallProgressCallback callback) {
+        final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        final String BIN = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        final String HOME = TermuxConstants.TERMUX_HOME_DIR_PATH;
+
         mExecutor.execute(() -> {
             // Step 0: Fix permissions
             mHandler.post(() -> callback.onStepStart(0, "Fixing permissions..."));
 
             CommandResult chmodResult = executeCommandSync(
-                "chmod +x $PREFIX/bin/* 2>/dev/null; " +
-                "chmod +x $PREFIX/lib/node_modules/.bin/* 2>/dev/null; " +
+                "chmod +x " + BIN + "/* 2>/dev/null; " +
+                "chmod +x " + PREFIX + "/lib/node_modules/.bin/* 2>/dev/null; " +
                 "exit 0"
             );
 
@@ -172,7 +176,9 @@ public class OwliaService extends Service {
             // Step 1: Verify Node.js and npm
             mHandler.post(() -> callback.onStepStart(1, "Verifying Node.js..."));
 
-            CommandResult verifyResult = executeCommandSync("node --version && npm --version");
+            CommandResult verifyResult = executeCommandSync(
+                BIN + "/node --version && " + BIN + "/npm --version"
+            );
 
             if (!verifyResult.success) {
                 mHandler.post(() -> callback.onError(
@@ -188,14 +194,32 @@ public class OwliaService extends Service {
             // Step 2: Install OpenClaw
             mHandler.post(() -> callback.onStepStart(2, "Installing OpenClaw..."));
 
+            // Use explicit paths for npm install
             CommandResult installResult = executeCommandSync(
-                "npm install -g openclaw@latest --ignore-scripts"
+                "export HOME=" + HOME + " && " +
+                "export PREFIX=" + PREFIX + " && " +
+                "export PATH=" + BIN + ":$PATH && " +
+                "export TMPDIR=" + PREFIX + "/tmp && " +
+                BIN + "/npm install -g openclaw@latest --ignore-scripts 2>&1"
             );
 
             if (!installResult.success) {
                 mHandler.post(() -> callback.onError(
                     "Failed to install OpenClaw:\n\n" +
-                    installResult.stderr
+                    installResult.stderr + "\n" + installResult.stdout
+                ));
+                return;
+            }
+
+            // Verify installation
+            CommandResult verifyInstall = executeCommandSync(
+                "test -f " + BIN + "/openclaw && echo 'OK' || echo 'FAIL'"
+            );
+
+            if (!verifyInstall.stdout.contains("OK")) {
+                mHandler.post(() -> callback.onError(
+                    "OpenClaw installation verification failed.\n" +
+                    "Binary not found at " + BIN + "/openclaw"
                 ));
                 return;
             }
@@ -216,10 +240,12 @@ public class OwliaService extends Service {
     }
 
     /**
-     * Check if OpenClaw is installed
+     * Check if OpenClaw is installed (check binary, not just module directory)
      */
     public static boolean isOpenclawInstalled() {
-        return new java.io.File(TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules/openclaw").exists();
+        // Check if the openclaw binary exists and is executable
+        java.io.File binary = new java.io.File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/openclaw");
+        return binary.exists() && binary.canExecute();
     }
 
     /**
