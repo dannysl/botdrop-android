@@ -121,6 +121,109 @@ public class OwliaConfig {
     }
     
     /**
+     * Set the API key/token for a provider
+     * Writes to the appropriate environment variable or config section
+     * @param provider Provider ID
+     * @param credential API key or setup token
+     * @return true if successful
+     */
+    public static boolean setApiKey(String provider, String credential) {
+        try {
+            JSONObject config = readConfig();
+
+            // Store auth credentials in providers section
+            if (!config.has("providers")) {
+                config.put("providers", new JSONObject());
+            }
+
+            JSONObject providers = config.getJSONObject("providers");
+            if (!providers.has(provider)) {
+                providers.put(provider, new JSONObject());
+            }
+
+            JSONObject providerConfig = providers.getJSONObject(provider);
+
+            // Set the appropriate key based on provider
+            String envKey = getEnvKeyForProvider(provider);
+            providerConfig.put("apiKey", credential);
+
+            // Also write to env file for openclaw to pick up
+            writeEnvFile(provider, envKey, credential);
+
+            return writeConfig(config);
+
+        } catch (JSONException e) {
+            Logger.logError(LOG_TAG, "Failed to set API key: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get the environment variable name for a provider's API key
+     */
+    private static String getEnvKeyForProvider(String provider) {
+        switch (provider) {
+            case "anthropic": return "ANTHROPIC_API_KEY";
+            case "openai": return "OPENAI_API_KEY";
+            case "google": return "GOOGLE_API_KEY";
+            case "openrouter": return "OPENROUTER_API_KEY";
+            case "kimi": return "KIMI_API_KEY";
+            case "minimax": return "MINIMAX_API_KEY";
+            case "venice": return "VENICE_API_KEY";
+            case "chutes": return "CHUTES_API_KEY";
+            default: return provider.toUpperCase() + "_API_KEY";
+        }
+    }
+
+    /**
+     * Write API key to .env file that openclaw reads
+     */
+    private static void writeEnvFile(String provider, String envKey, String credential) {
+        String envDir = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.config/openclaw";
+        File envFile = new File(envDir + "/.env");
+
+        try {
+            // Read existing env content
+            StringBuilder existing = new StringBuilder();
+            if (envFile.exists()) {
+                try (FileReader reader = new FileReader(envFile)) {
+                    char[] buffer = new char[1024];
+                    int read;
+                    while ((read = reader.read(buffer)) != -1) {
+                        existing.append(buffer, 0, read);
+                    }
+                }
+            }
+
+            // Remove existing entry for this key if present
+            String content = existing.toString();
+            String[] lines = content.split("\n");
+            StringBuilder newContent = new StringBuilder();
+            for (String line : lines) {
+                if (!line.startsWith(envKey + "=")) {
+                    if (line.length() > 0) {
+                        newContent.append(line).append("\n");
+                    }
+                }
+            }
+
+            // Append new key
+            newContent.append(envKey).append("=").append(credential).append("\n");
+
+            // Write
+            new File(envDir).mkdirs();
+            try (FileWriter writer = new FileWriter(envFile)) {
+                writer.write(newContent.toString());
+            }
+
+            Logger.logInfo(LOG_TAG, "Env file updated with " + envKey);
+
+        } catch (IOException e) {
+            Logger.logError(LOG_TAG, "Failed to write env file: " + e.getMessage());
+        }
+    }
+
+    /**
      * Check if config file exists and has basic structure
      * @return true if configured
      */

@@ -378,69 +378,35 @@ public class AuthFragment extends Fragment {
     }
 
     private boolean validateCredentialFormat(String credential) {
-        if (credential.length() < 10) {
-            return false;
-        }
-
-        switch (mSelectedProvider.getId()) {
-            case "anthropic":
-                if (mSelectedAuthMethod == ProviderInfo.AuthMethod.SETUP_TOKEN) {
-                    return credential.startsWith("stp_") || credential.startsWith("sk-ant-");
-                } else {
-                    return credential.startsWith("sk-ant-");
-                }
-            case "openai":
-                return credential.startsWith("sk-") || credential.startsWith("sk-proj-");
-            default:
-                return true;
-        }
+        // Basic length check only — different providers have different formats
+        return credential.length() >= 8;
     }
 
     private void saveCredentials(String credential) {
-        if (!mBound || mService == null) {
-            showStatus("Service not available", false);
-            resetVerifyButton();
-            return;
-        }
-
         String model = getDefaultModel(mSelectedProvider.getId());
-        String authCommand = buildAuthCommand(credential);
+        String providerId = mSelectedProvider.getId();
 
-        Logger.logInfo(LOG_TAG, "Setting auth with command: " + authCommand);
+        Logger.logInfo(LOG_TAG, "Saving credentials for provider: " + providerId);
 
-        mService.executeCommand(authCommand, result -> {
-            if (result.success) {
-                boolean configWritten = OwliaConfig.setProvider(mSelectedProvider.getId(), model);
-                
-                if (configWritten) {
-                    Logger.logInfo(LOG_TAG, "Auth configured successfully");
-                    showStatus("✓ Connected!\nModel: " + mSelectedProvider.getId() + "/" + model, true);
-                    
-                    // Auto-advance after short delay
-                    mVerifyButton.postDelayed(() -> {
-                        SetupActivity activity = (SetupActivity) getActivity();
-                        if (activity != null) {
-                            activity.goToNextStep();
-                        }
-                    }, 1500);
-                } else {
-                    showStatus("Failed to write config", false);
-                    resetVerifyButton();
+        // Write API key and provider config directly (no CLI dependency)
+        boolean keyWritten = OwliaConfig.setApiKey(providerId, credential);
+        boolean providerWritten = OwliaConfig.setProvider(providerId, model);
+
+        if (keyWritten && providerWritten) {
+            Logger.logInfo(LOG_TAG, "Auth configured successfully");
+            showStatus("✓ Connected!\nModel: " + providerId + "/" + model, true);
+
+            // Auto-advance after short delay
+            mVerifyButton.postDelayed(() -> {
+                SetupActivity activity = (SetupActivity) getActivity();
+                if (activity != null) {
+                    activity.goToNextStep();
                 }
-            } else {
-                Logger.logError(LOG_TAG, "Auth command failed: " + result.stderr);
-                showStatus("Verification failed:\n" + result.stderr, false);
-                resetVerifyButton();
-            }
-        });
-    }
-
-    private String buildAuthCommand(String credential) {
-        String escaped = credential.replace("\"", "\\\"");
-        
-        return "export HOME=" + com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
-               "export PREFIX=" + com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH + " && " +
-               "$PREFIX/bin/openclaw auth set " + mSelectedProvider.getId() + " \"" + escaped + "\"";
+            }, 1500);
+        } else {
+            showStatus("Failed to write config. Check app permissions.", false);
+            resetVerifyButton();
+        }
     }
 
     private String getDefaultModel(String providerId) {

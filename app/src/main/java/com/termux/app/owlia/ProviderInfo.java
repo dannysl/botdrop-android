@@ -67,16 +67,16 @@ public class ProviderInfo {
         providers.add(new ProviderInfo(
             "openai",
             "OpenAI",
-            "API Key or OAuth",
-            Arrays.asList(AuthMethod.API_KEY, AuthMethod.OAUTH),
+            "API Key",
+            Arrays.asList(AuthMethod.API_KEY),
             false
         ));
         
         providers.add(new ProviderInfo(
             "google",
             "Google (Gemini)",
-            "API Key or OAuth",
-            Arrays.asList(AuthMethod.API_KEY, AuthMethod.OAUTH),
+            "API Key",
+            Arrays.asList(AuthMethod.API_KEY),
             false
         ));
         
@@ -124,8 +124,8 @@ public class ProviderInfo {
         providers.add(new ProviderInfo(
             "chutes",
             "Chutes",
-            "OAuth",
-            Arrays.asList(AuthMethod.OAUTH),
+            "API Key",
+            Arrays.asList(AuthMethod.API_KEY),
             false
         ));
         
