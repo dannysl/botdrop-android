@@ -480,7 +480,7 @@ public final class TermuxInstaller {
                 "    fi\n\n" +
                 "    # Install OpenClaw\n" +
                 "    echo \"Installing OpenClaw...\"\n" +
-                "    if npm install -g openclaw@latest --ignore-scripts; then\n" +
+                "    if npm install -g openclaw@latest --ignore-scripts --force; then\n" +
                 "        touch \"$OWLIA_FIRST_RUN_MARKER\"\n" +
                 "        echo \"\"\n" +
                 "        echo \"✓ OpenClaw installed\"\n" +
@@ -489,7 +489,7 @@ public final class TermuxInstaller {
                 "    else\n" +
                 "        echo \"\"\n" +
                 "        echo \"✗ OpenClaw installation failed\"\n" +
-                "        echo \"  Try manually: npm install -g openclaw@latest --ignore-scripts\"\n" +
+                "        echo \"  Try manually: npm install -g openclaw@latest --ignore-scripts --force\"\n" +
                 "    fi\n" +
                 "    echo \"\"\n" +
                 "fi\n";
