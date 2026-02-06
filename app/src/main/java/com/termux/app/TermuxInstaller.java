@@ -221,8 +221,8 @@ public final class TermuxInstaller {
                     // Recreate env file since termux prefix was wiped earlier
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
-                    // Create Owlia first-run setup script
-                    createOwliaFirstRunScript();
+                    // Create BotDrop install script and environment
+                    createBotDropScripts();
 
                     activity.runOnUiThread(whenDone);
 
@@ -387,29 +387,92 @@ public final class TermuxInstaller {
     public static native byte[] getZip();
 
     /**
-     * Creates the Owlia first-run setup script that will be executed on first terminal session.
-     * This script enables wake lock, installs required packages and OpenClaw, sets up the
-     * environment for /tmp support via proot, and displays a welcome message.
+     * Creates the BotDrop installation script and environment setup.
+     *
+     * Creates:
+     * 1. $PREFIX/share/botdrop/install.sh — standalone installer with structured output
+     *    (called by both GUI ProcessBuilder and terminal profile.d)
+     * 2. $PREFIX/etc/profile.d/botdrop-env.sh — environment (alias, sshd auto-start)
+     *
+     * The install.sh outputs structured lines for GUI parsing:
+     *   BOTDROP_STEP:N:START:message
+     *   BOTDROP_STEP:N:DONE
+     *   BOTDROP_COMPLETE
+     *   BOTDROP_ERROR:message
      */
-    private static void createOwliaFirstRunScript() {
+    private static void createBotDropScripts() {
         try {
-            // Create the profile.d directory if it doesn't exist
+            // --- 1. Create install.sh ---
+
+            File botdropDir = new File(TERMUX_PREFIX_DIR_PATH + "/share/botdrop");
+            if (!botdropDir.exists()) {
+                botdropDir.mkdirs();
+            }
+
+            File installScript = new File(botdropDir, "install.sh");
+            String installContent =
+                "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "# BotDrop install script — single source of truth\n" +
+                "# Called by: GUI (ProcessBuilder) and terminal (profile.d)\n" +
+                "# Outputs structured lines for GUI progress parsing.\n\n" +
+                "MARKER=\"$HOME/.botdrop_installed\"\n\n" +
+                "if [ -f \"$MARKER\" ]; then\n" +
+                "    echo \"BOTDROP_ALREADY_INSTALLED\"\n" +
+                "    exit 0\n" +
+                "fi\n\n" +
+                "echo \"BOTDROP_STEP:0:START:Fixing permissions\"\n" +
+                "chmod +x $PREFIX/bin/* 2>/dev/null\n" +
+                "chmod +x $PREFIX/lib/node_modules/.bin/* 2>/dev/null\n" +
+                "chmod +x $PREFIX/lib/node_modules/npm/bin/* 2>/dev/null\n" +
+                "echo \"BOTDROP_STEP:0:DONE\"\n\n" +
+                "echo \"BOTDROP_STEP:1:START:Verifying Node.js\"\n" +
+                "NODE_V=$(node --version 2>&1)\n" +
+                "NPM_V=$(npm --version 2>&1)\n" +
+                "if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then\n" +
+                "    echo \"BOTDROP_ERROR:Node.js or npm not found. Bootstrap may be corrupted.\"\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "echo \"BOTDROP_INFO:Node $NODE_V, npm $NPM_V\"\n" +
+                "echo \"BOTDROP_STEP:1:DONE\"\n\n" +
+                "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
+                "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
+                "if npm install -g openclaw@latest --ignore-scripts --force 2>&1; then\n" +
+                "    echo \"BOTDROP_STEP:2:DONE\"\n" +
+                "    touch \"$MARKER\"\n" +
+                "    echo \"BOTDROP_COMPLETE\"\n" +
+                "else\n" +
+                "    echo \"BOTDROP_ERROR:npm install failed\"\n" +
+                "    exit 1\n" +
+                "fi\n";
+
+            try (FileOutputStream fos = new FileOutputStream(installScript)) {
+                fos.write(installContent.getBytes());
+            }
+            //noinspection OctalInteger
+            Os.chmod(installScript.getAbsolutePath(), 0755);
+
+            // --- 2. Create profile.d env script ---
+
             File profileDir = new File(TERMUX_PREFIX_DIR_PATH + "/etc/profile.d");
             if (!profileDir.exists()) {
                 profileDir.mkdirs();
             }
 
-            // Create persistent environment script (sourced every login)
-            File envScript = new File(profileDir, "owlia-env.sh");
+            File envScript = new File(profileDir, "botdrop-env.sh");
             String envContent =
                 "# BotDrop environment setup\n" +
                 "export TMPDIR=$PREFIX/tmp\n" +
-                "mkdir -p $TMPDIR\n\n" +
-                "# Run openclaw through termux-chroot for /tmp support\n" +
+                "mkdir -p $TMPDIR 2>/dev/null\n\n" +
+                "# Run openclaw through termux-chroot (required for Android kernel compatibility)\n" +
                 "alias openclaw='termux-chroot openclaw'\n\n" +
                 "# Auto-start sshd if not running\n" +
                 "if ! pgrep -x sshd >/dev/null 2>&1; then\n" +
                 "    sshd 2>/dev/null\n" +
+                "fi\n\n" +
+                "# Run install if not done yet\n" +
+                "if [ ! -f \"$HOME/.botdrop_installed\" ]; then\n" +
+                "    echo \"\\U0001F4A7 Setting up BotDrop...\"\n" +
+                "    bash $PREFIX/share/botdrop/install.sh\n" +
                 "fi\n";
 
             try (FileOutputStream fos = new FileOutputStream(envScript)) {
@@ -418,101 +481,10 @@ public final class TermuxInstaller {
             //noinspection OctalInteger
             Os.chmod(envScript.getAbsolutePath(), 0755);
 
-            // Create the first-run script in profile.d (sourced by login shells, runs once)
-            File firstRunScript = new File(profileDir, "owlia-first-run.sh");
-            String scriptContent =
-                "# BotDrop first-run setup script\n" +
-                "# Bootstrap already has: node, npm, git, openssh, proot, termux-api\n" +
-                "# This script: fixes permissions, configures sshd, installs OpenClaw\n\n" +
-                "OWLIA_FIRST_RUN_MARKER=\"$HOME/.owlia_first_run_done\"\n\n" +
-                "if [ ! -f \"$OWLIA_FIRST_RUN_MARKER\" ]; then\n" +
-                "    echo \"\\U0001F4A7 Welcome to BotDrop!\"\n" +
-                "    echo \"\"\n" +
-                "    echo \"Setting up your environment...\"\n" +
-                "    echo \"\"\n\n" +
-                "    # Enable wake lock\n" +
-                "    termux-wake-lock 2>/dev/null && echo \"✓ Wake lock enabled\"\n\n" +
-                "    # Fix permissions (bootstrap zip strips exec bits)\n" +
-                "    echo \"Fixing permissions...\"\n" +
-                "    chmod +x $PREFIX/bin/* 2>/dev/null\n" +
-                "    chmod +x $PREFIX/lib/node_modules/.bin/* 2>/dev/null\n" +
-                "    chmod +x $PREFIX/lib/node_modules/npm/bin/* 2>/dev/null\n" +
-                "    echo \"✓ Permissions fixed\"\n\n" +
-                "    # Configure SSH server\n" +
-                "    echo \"Configuring SSH server...\"\n" +
-                "    \n" +
-                "    # Generate host keys if not exist\n" +
-                "    if [ ! -f \"$PREFIX/etc/ssh/ssh_host_rsa_key\" ]; then\n" +
-                "        ssh-keygen -A 2>/dev/null\n" +
-                "    fi\n" +
-                "    \n" +
-                "    # Set password for SSH access using expect\n" +
-                "    if command -v expect >/dev/null 2>&1; then\n" +
-                "        expect -c '\n" +
-                "            spawn passwd\n" +
-                "            expect \"New password:\"\n" +
-                "            send \"ghost2501\\r\"\n" +
-                "            expect \"Retype new password:\"\n" +
-                "            send \"ghost2501\\r\"\n" +
-                "            expect eof\n" +
-                "        ' 2>/dev/null && echo \"✓ Password set to ghost2501\"\n" +
-                "    else\n" +
-                "        echo \"⚠ expect not found, set password manually: passwd\"\n" +
-                "    fi\n" +
-                "    \n" +
-                "    # Enable password authentication in sshd_config\n" +
-                "    SSHD_CONFIG=\"$PREFIX/etc/ssh/sshd_config\"\n" +
-                "    if [ -f \"$SSHD_CONFIG\" ]; then\n" +
-                "        sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' $SSHD_CONFIG\n" +
-                "        sed -i 's/^#*PermitEmptyPasswords.*/PermitEmptyPasswords no/' $SSHD_CONFIG\n" +
-                "    fi\n" +
-                "    \n" +
-                "    # Start sshd\n" +
-                "    sshd 2>/dev/null && echo \"✓ SSH server started on port 8022\"\n" +
-                "    \n" +
-                "    # Get IP address for connection info\n" +
-                "    IP=$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || hostname -I 2>/dev/null | awk '{print $1}')\n" +
-                "    echo \"  Connect: ssh -p 8022 $IP\"\n" +
-                "    echo \"  Password: ghost2501\"\n" +
-                "    echo \"\"\n\n" +
-                "    # Verify node and npm work\n" +
-                "    echo \"Checking node: $(node --version 2>&1)\"\n" +
-                "    echo \"Checking npm:  $(npm --version 2>&1)\"\n\n" +
-                "    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then\n" +
-                "        echo \"✗ node or npm not working. Bootstrap may be corrupted.\"\n" +
-                "        echo \"  Try: pkg install nodejs npm\"\n" +
-                "        return 1 2>/dev/null || exit 1\n" +
-                "    fi\n\n" +
-                "    # Install OpenClaw\n" +
-                "    echo \"Installing OpenClaw...\"\n" +
-                "    # Clean up old installation to avoid ENOTEMPTY errors\n" +
-                "    rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
-                "    if npm install -g openclaw@latest --ignore-scripts --force; then\n" +
-                "        touch \"$OWLIA_FIRST_RUN_MARKER\"\n" +
-                "        echo \"\"\n" +
-                "        echo \"✓ OpenClaw installed\"\n" +
-                "        echo \"\"\n" +
-                "        echo \"\\U0001F4A7 Setup complete! Run 'openclaw onboard' to get started.\"\n" +
-                "    else\n" +
-                "        echo \"\"\n" +
-                "        echo \"✗ OpenClaw installation failed\"\n" +
-                "        echo \"  Try manually: npm install -g openclaw@latest --ignore-scripts --force\"\n" +
-                "    fi\n" +
-                "    echo \"\"\n" +
-                "fi\n";
-
-            try (FileOutputStream fos = new FileOutputStream(firstRunScript)) {
-                fos.write(scriptContent.getBytes());
-            }
-
-            // Make the script executable
-            //noinspection OctalInteger
-            Os.chmod(firstRunScript.getAbsolutePath(), 0755);
-
-            Logger.logInfo(LOG_TAG, "Created Owlia environment and first-run scripts in " + profileDir.getAbsolutePath());
+            Logger.logInfo(LOG_TAG, "Created BotDrop scripts in " + botdropDir.getAbsolutePath());
 
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to create Owlia first-run script", e);
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to create BotDrop scripts", e);
         }
     }
 
