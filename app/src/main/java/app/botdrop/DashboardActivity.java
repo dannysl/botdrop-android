@@ -218,16 +218,27 @@ public class DashboardActivity extends Activity {
         if (isRunning) {
             mStatusText.setText("Gateway Running");
             mStatusIndicator.setBackgroundResource(R.drawable.status_indicator_running);
-            mStartButton.setEnabled(false);
-            mStopButton.setEnabled(true);
-            mRestartButton.setEnabled(true);
+            setButtonState(mStartButton, false, true);
+            setButtonState(mStopButton, true, false);
+            setButtonState(mRestartButton, true, true);
         } else {
             mStatusText.setText("Gateway Stopped");
             mStatusIndicator.setBackgroundResource(R.drawable.status_indicator_stopped);
             mUptimeText.setText("—");
-            mStartButton.setEnabled(true);
-            mStopButton.setEnabled(false);
-            mRestartButton.setEnabled(false);
+            setButtonState(mStartButton, true, true);
+            setButtonState(mStopButton, false, false);
+            setButtonState(mRestartButton, false, true);
+        }
+    }
+
+    private void setButtonState(Button button, boolean enabled, boolean isFilled) {
+        button.setEnabled(enabled);
+        if (enabled) {
+            button.setAlpha(1.0f);
+            button.setTextColor(isFilled ? 0xFF1A1A1A : getResources().getColor(R.color.botdrop_accent));
+        } else {
+            button.setAlpha(0.5f);
+            button.setTextColor(0xFF888888);
         }
     }
 

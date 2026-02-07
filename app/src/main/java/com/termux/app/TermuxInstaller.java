@@ -415,6 +415,9 @@ public final class TermuxInstaller {
                 "# BotDrop install script — single source of truth\n" +
                 "# Called by: GUI (ProcessBuilder) and terminal (profile.d)\n" +
                 "# Outputs structured lines for GUI progress parsing.\n\n" +
+                "LOGFILE=\"$HOME/botdrop-install.log\"\n" +
+                "exec > >(tee -a \"$LOGFILE\") 2>&1\n" +
+                "echo \"=== BotDrop install started: $(date) ===\"\n\n" +
                 "MARKER=\"$HOME/.botdrop_installed\"\n\n" +
                 "if [ -f \"$MARKER\" ]; then\n" +
                 "    echo \"BOTDROP_ALREADY_INSTALLED\"\n" +
@@ -432,7 +435,7 @@ public final class TermuxInstaller {
                 "chmod 600 $HOME/.ssh/authorized_keys\n" +
                 "for a in rsa ecdsa ed25519; do\n" +
                 "    KEYFILE=\"$PREFIX/etc/ssh/ssh_host_${a}_key\"\n" +
-                "    test ! -f \"$KEYFILE\" && ssh-keygen -N '' -t $a -f \"$KEYFILE\" 2>/dev/null\n" +
+                "    test ! -f \"$KEYFILE\" && ssh-keygen -N '' -t $a -f \"$KEYFILE\" >/dev/null 2>&1\n" +
                 "done\n" +
                 "# Set SSH password (default: ghost2501)\n" +
                 "printf 'ghost2501\\nghost2501\\n' | passwd >/dev/null 2>&1\n" +
@@ -456,12 +459,14 @@ public final class TermuxInstaller {
                 "echo \"BOTDROP_STEP:1:DONE\"\n\n" +
                 "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
                 "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
-                "if npm install -g openclaw@latest --ignore-scripts --force 2>&1; then\n" +
+                "NPM_OUTPUT=$(npm install -g openclaw@latest --ignore-scripts --force 2>&1)\n" +
+                "NPM_EXIT=$?\n" +
+                "if [ $NPM_EXIT -eq 0 ]; then\n" +
                 "    echo \"BOTDROP_STEP:2:DONE\"\n" +
                 "    touch \"$MARKER\"\n" +
                 "    echo \"BOTDROP_COMPLETE\"\n" +
                 "else\n" +
-                "    echo \"BOTDROP_ERROR:npm install failed\"\n" +
+                "    echo \"BOTDROP_ERROR:npm install failed (exit $NPM_EXIT): $NPM_OUTPUT\"\n" +
                 "    exit 1\n" +
                 "fi\n";
 

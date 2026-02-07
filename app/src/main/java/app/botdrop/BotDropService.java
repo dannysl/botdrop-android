@@ -125,12 +125,10 @@ public class BotDropService extends Service {
             ProcessBuilder pb = new ProcessBuilder(
                 TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash", tmpScript.getAbsolutePath());
 
-            // Set Termux environment variables
             pb.environment().put("PREFIX", TermuxConstants.TERMUX_PREFIX_DIR_PATH);
             pb.environment().put("HOME", TermuxConstants.TERMUX_HOME_DIR_PATH);
             pb.environment().put("PATH", TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":" + System.getenv("PATH"));
             pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
-            pb.environment().put("LD_LIBRARY_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib");
 
             pb.redirectErrorStream(false);
 
@@ -214,7 +212,6 @@ public class BotDropService extends Service {
                 pb.environment().put("HOME", TermuxConstants.TERMUX_HOME_DIR_PATH);
                 pb.environment().put("PATH", TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":" + System.getenv("PATH"));
                 pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
-                pb.environment().put("LD_LIBRARY_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib");
                 pb.redirectErrorStream(true);
 
                 Logger.logInfo(LOG_TAG, "Starting install via " + INSTALL_SCRIPT);

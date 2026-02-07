@@ -4,21 +4,41 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <!--
-        Updated notification icon compliant with system icons guidelines
-        https://material.io/design/iconography/system-icons.html
+        BotDrop notification icon - simplified robot head (monochrome)
+        Based on the BotDrop mascot character
     -->
 
-    <group>
-        <clip-path
-            android:pathData="M0,0h24v24h-24z"/>
+    <!-- Robot head (circle) -->
+    <path
+        android:pathData="M12,8a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z"
+        android:fillColor="#ffffff"/>
 
-        <path
-            android:pathData="M5,4H2L8,12L2,20H5L11,12L5,4Z"
-            android:fillColor="#ffffff"/>
+    <!-- Left eye -->
+    <path
+        android:pathData="M9.5,13a1.5,1.5 0,1 1,0 0.01"
+        android:fillColor="#000000"/>
 
-        <path
-            android:pathData="M13,18H22V20H13V18Z"
-            android:fillColor="#ffffff"/>
+    <!-- Right eye -->
+    <path
+        android:pathData="M14.5,13a1.5,1.5 0,1 1,0 0.01"
+        android:fillColor="#000000"/>
 
-    </group>
+    <!-- Left antenna -->
+    <path
+        android:pathData="M9,8L8,5"
+        android:strokeWidth="1.2"
+        android:strokeColor="#ffffff"/>
+    <path
+        android:pathData="M8,5a0.8,0.8 0,1 1,0 0.01"
+        android:fillColor="#ffffff"/>
+
+    <!-- Right antenna -->
+    <path
+        android:pathData="M15,8L16,5"
+        android:strokeWidth="1.2"
+        android:strokeColor="#ffffff"/>
+    <path
+        android:pathData="M16,5a0.8,0.8 0,1 1,0 0.01"
+        android:fillColor="#ffffff"/>
+
 </vector>
