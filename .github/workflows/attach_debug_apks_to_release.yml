@@ -1,9 +1,9 @@
-name: Attach Debug APKs To Release
+name: Attach Debug APKs To Release (DISABLED)
 
+# Disabled: This is the old Termux workflow that uses `hub` CLI and `termux-app_` naming.
+# It destructively deletes releases on failure. Use build-apk.yml instead.
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
 
 jobs:
   attach-apks:
