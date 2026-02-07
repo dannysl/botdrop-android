@@ -180,7 +180,8 @@ def downloadBootstrap(String arch) {
         return
     }
 
-    def remoteUrl = "https://github.com/louzhixian/botdrop-packages/releases/latest/download/bootstrap-" + arch + ".zip"
+    // TODO: Rename GitHub repo from owlia-packages to botdrop-packages, then update this URL
+    def remoteUrl = "https://github.com/louzhixian/owlia-packages/releases/latest/download/bootstrap-" + arch + ".zip"
     logger.quiet("Downloading " + remoteUrl + " ...")
 
     file.parentFile.mkdirs()
