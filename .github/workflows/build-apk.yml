@@ -37,12 +37,12 @@ jobs:
 
       - name: Download bootstrap archives
         run: |
-          echo "Downloading bootstrap archives from botdrop-packages releases..."
+          echo "Downloading bootstrap archives from botdrop-packages latest release..."
           cd app/src/main/cpp
-          url="https://github.com/zhixianio/botdrop-packages/releases/download/bootstrap-2026.02.07-r1%2Bbotdrop/bootstrap-aarch64.zip"
+          url="https://github.com/zhixianio/botdrop-packages/releases/latest/download/bootstrap-aarch64.zip"
           echo "Downloading ${url}..."
-          curl -fsSL -o "bootstrap-aarch64.zip" "$url"
-          echo "✅ Downloaded bootstrap-aarch64.zip ($(stat --printf='%s' bootstrap-aarch64.zip) bytes)"
+          curl -fsSL -L -o "bootstrap-aarch64.zip" "$url"
+          echo "Downloaded bootstrap-aarch64.zip ($(stat --printf='%s' bootstrap-aarch64.zip) bytes)"
 
       - name: Decode signing key
         env:

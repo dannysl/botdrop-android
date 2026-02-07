@@ -127,21 +127,14 @@ public class DashboardActivity extends Activity {
         Intent intent = new Intent(this, BotDropService.class);
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
-        // Check for app updates
-        UpdateChecker.check(this, (latestVersion, downloadUrl, notes) -> {
-            mUpdateBannerText.setText("Update available: v" + latestVersion);
-            mUpdateBanner.setVisibility(View.VISIBLE);
+        // Check for app updates (also picks up results from launcher check)
+        UpdateChecker.check(this, (latestVersion, downloadUrl, notes) -> showUpdateBanner(latestVersion, downloadUrl));
 
-            findViewById(R.id.btn_update_download).setOnClickListener(v -> {
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl));
-                startActivity(browserIntent);
-            });
-
-            findViewById(R.id.btn_update_dismiss).setOnClickListener(v -> {
-                mUpdateBanner.setVisibility(View.GONE);
-                UpdateChecker.dismiss(this, latestVersion);
-            });
-        });
+        // Also check stored result in case launcher already fetched it
+        String[] stored = UpdateChecker.getAvailableUpdate(this);
+        if (stored != null) {
+            showUpdateBanner(stored[0], stored[1]);
+        }
     }
 
     @Override
@@ -263,6 +256,21 @@ public class DashboardActivity extends Activity {
             button.setAlpha(0.5f);
             button.setTextColor(ContextCompat.getColor(this, R.color.botdrop_secondary_text));
         }
+    }
+
+    private void showUpdateBanner(String latestVersion, String downloadUrl) {
+        mUpdateBannerText.setText("Update available: v" + latestVersion);
+        mUpdateBanner.setVisibility(View.VISIBLE);
+
+        findViewById(R.id.btn_update_download).setOnClickListener(v -> {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl));
+            startActivity(browserIntent);
+        });
+
+        findViewById(R.id.btn_update_dismiss).setOnClickListener(v -> {
+            mUpdateBanner.setVisibility(View.GONE);
+            UpdateChecker.dismiss(this, latestVersion);
+        });
     }
 
     /**

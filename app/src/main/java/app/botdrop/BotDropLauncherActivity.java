@@ -68,6 +68,9 @@ public class BotDropLauncherActivity extends Activity {
         mNotificationStatus = findViewById(R.id.notification_status);
         mBatteryStatus = findViewById(R.id.battery_status);
 
+        // Trigger update check early (results stored for Dashboard to display)
+        UpdateChecker.check(this, null);
+
         mNotificationButton.setOnClickListener(v -> openNotificationSettings());
         mBatteryButton.setOnClickListener(v -> requestBatteryOptimization());
         mContinueButton.setOnClickListener(v -> {
