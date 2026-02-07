@@ -73,7 +73,7 @@ jobs:
 
           APK_DIR_PATH="./app/build/outputs/apk/release"
           APK_VERSION_TAG="$RELEASE_VERSION_NAME-${{ env.PACKAGE_VARIANT }}-release"
-          APK_BASENAME_PREFIX="owlia-app_$APK_VERSION_TAG"
+          APK_BASENAME_PREFIX="botdrop-app_$APK_VERSION_TAG"
 
           echo "APK_DIR_PATH=$APK_DIR_PATH" >> $GITHUB_ENV
           echo "APK_VERSION_TAG=$APK_VERSION_TAG" >> $GITHUB_ENV
