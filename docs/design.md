@@ -684,30 +684,17 @@ res/layout/
 
 ---
 
-## 开发流程
+## Development Notes
 
-### 推进方式
-- **主 agent (Owlia)** 调度 + 拆任务
-- **Subagent** 执行编码工作，通过 **Claude Code (cc)** + **superpowers 插件**
-- cc 使用 `ANTHROPIC_SETUP_TOKEN` 环境变量认证
-- superpowers 工作流：brainstorm → write-plans → execute-plans
-
-### 子任务调用模板
-```bash
-export ANTHROPIC_SETUP_TOKEN="<token>"
-claude --dangerously-skip-permissions \
-  -p "Read the design doc at ~/clawd/memory/projects/owlia-android-gui.md, then execute GUI-M0 task: <specific task description>. 
-  Work in ~/Codes/owlia-android/. 
-  Use superpowers plugin: brainstorm first, then write a plan, then execute.
-  When done, commit changes and run: openclaw gateway wake --text 'Done: <summary>' --mode now"
-```
-
-### 进度汇报
-- 每个 milestone 完成后向 Discord #📱｜phone-host 发送更新
-- 技术决策记录到本文档的踩坑记录区
+### Implementation Strategy
+- Break work into small, testable milestones
+- Follow the component architecture defined above
+- Leverage existing Termux infrastructure where possible
+- Test thoroughly at each stage
+- Document any technical decisions or challenges encountered
 
 ---
 
-_创建于: 2026-02-05_
-_更新于: 2026-02-05 (简化为 3 步向导 + bot 辅助配置 + cc 开发流程)_
-_状态: 设计完成，待开发_
+_Created: 2026-02-05_
+_Updated: 2026-02-07 (Cleaned for open-source release)_
+_Status: Design complete, ready for implementation_
