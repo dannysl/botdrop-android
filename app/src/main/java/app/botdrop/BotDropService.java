@@ -130,26 +130,17 @@ public class BotDropService extends Service {
             pb.environment().put("PATH", TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":" + System.getenv("PATH"));
             pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
 
-            pb.redirectErrorStream(false);
+            pb.redirectErrorStream(true);
 
             Logger.logDebug(LOG_TAG, "Executing: " + command);
             process = pb.start();
 
-            // Read stdout
+            // Read stdout (stderr is merged via redirectErrorStream)
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     stdout.append(line).append("\n");
                     Logger.logVerbose(LOG_TAG, "stdout: " + line);
-                }
-            }
-
-            // Read stderr
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    stderr.append(line).append("\n");
-                    Logger.logVerbose(LOG_TAG, "stderr: " + line);
                 }
             }
 

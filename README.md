@@ -12,10 +12,6 @@ BotDrop wraps [OpenClaw](https://github.com/nicepkg/openclaw) into a user-friend
 - **Background gateway** — Keeps your agent running with auto-restart
 - **No terminal required** — Everything happens through the GUI
 
-## Screenshots
-
-[TODO: Add screenshots]
-
 ## Installation
 
 ### Download APK

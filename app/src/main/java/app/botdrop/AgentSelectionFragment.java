@@ -20,7 +20,7 @@ import com.termux.shared.logger.Logger;
  *
  * Currently offers:
  * - OpenClaw (available, triggers install)
- * - OwliaBot (coming soon, disabled)
+ * - OwliaBot (a distinct AI agent product, not a rename leftover - coming soon, disabled)
  */
 public class AgentSelectionFragment extends Fragment {
 

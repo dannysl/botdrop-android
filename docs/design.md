@@ -1,4 +1,4 @@
-# Owlia Android GUI 设计文档
+# BotDrop Android GUI 设计文档
 
 > 目标：用户从安装到运行 OpenClaw，全程 **零命令行**
 > 核心哲学：**App GUI 只负责点火，配置交给 AI 自己完成**
@@ -6,7 +6,7 @@
 ## 核心理念
 
 App 做最少的事：装好 OpenClaw → 填 API Key → 连一个频道 → 启动。
-之后所有进一步配置（加频道、调模型、装 skill 等）用户直接跟 **Owlia 的 TG bot / DC bot 聊天**完成。
+之后所有进一步配置（加频道、调模型、装 skill 等）用户直接跟 **BotDrop 的 TG bot / DC bot 聊天**完成。
 
 不做自己的 Web UI，不复制 OpenClaw control-ui。
 
@@ -22,7 +22,7 @@ App 做最少的事：装好 OpenClaw → 填 API Key → 连一个频道 → �
 
 ```
 安装 APK → 打开 → 自动安装（进度条，无终端）
-→ 选 Provider + Auth → 用 @OwliaSetupBot 连频道（或手动）→ 启动
+→ 选 Provider + Auth → 用 @BotDropSetupBot 连频道（或手动）→ 启动
 → 之后跟自己的 bot 聊天做后续配置
 ```
 
@@ -32,7 +32,7 @@ App 做最少的事：装好 OpenClaw → 填 API Key → 连一个频道 → �
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  App 启动 (OwliaLauncherActivity)                            │
+│  App 启动 (BotDropLauncherActivity)                            │
 │  ↓                                                          │
 │  检查状态:                                                    │
 │  - bootstrap 解压完？ → 否 → 等 TermuxInstaller               │
@@ -47,10 +47,10 @@ App 做最少的事：装好 OpenClaw → 填 API Key → 连一个频道 → �
 
 | 组件 | 类型 | 职责 |
 |------|------|------|
-| `OwliaLauncherActivity` | Activity | 启动路由 |
+| `BotDropLauncherActivity` | Activity | 启动路由 |
 | `SetupActivity` | Activity + ViewPager2 | 3 步向导 |
 | `DashboardActivity` | Activity | 极简状态面板 |
-| `OwliaService` | Foreground Service | 后台运行 gateway + 命令执行 |
+| `BotDropService` | Foreground Service | 后台运行 gateway + 命令执行 |
 | `TermuxActivity` | (保留) | 高级入口，从 Dashboard 进 |
 
 ---
@@ -63,7 +63,7 @@ App 做最少的事：装好 OpenClaw → 填 API Key → 连一个频道 → �
 ┌──────────────────────────────┐
 │                              │
 │         🦉                   │
-│      Owlia                   │
+│      BotDrop                 │
 │                              │
 │  Your AI assistant,          │
 │  running on your phone.      │
@@ -206,7 +206,7 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 ```
 
 **OAuth 回调技术要点：**
-- 注册 deep link scheme: `owlia://oauth-callback`
+- 注册 deep link scheme: `botdrop://oauth-callback`
 - OpenClaw OAuth flow 会启动 localhost server 监听回调
 - Android 上需要拦截 `http://127.0.0.1:1455/oauth-callback` 或 `http://127.0.0.1:1456/oauth-callback`
 - 或者让 openclaw 直接处理（在 proot 环境里跑 OAuth flow，打开浏览器用 `termux-open-url`）
@@ -217,9 +217,9 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 - 需要浏览器时调用 `termux-open-url`
 - 这样不需要在 Java 侧重新实现每种 auth 逻辑
 
-### Step 3: Connect a Channel — @OwliaSetupBot 辅助
+### Step 3: Connect a Channel — @BotDropSetupBot 辅助
 
-**核心思路**：运维一个官方 **@OwliaSetupBot**（TG + DC），帮用户完成最卡人的步骤。
+**核心思路**：运维一个官方 **@BotDropSetupBot**（TG + DC），帮用户完成最卡人的步骤。
 
 **为什么需要 Helper Bot：**
 - 创建 bot、拿 token、找 user ID 这三步对新手很卡
@@ -236,7 +236,7 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 │  Connect a chat platform     │
 │                              │
 │  ┌────────────────────────┐  │
-│  │ ⭐ Use @OwliaSetupBot   │  │
+│  │ ⭐ Use @BotDropSetupBot   │  │
 │  │   Guided setup (easy)   │  │
 │  └────────────────────────┘  │
 │                              │
@@ -248,16 +248,16 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 └──────────────────────────────┘
 ```
 
-**选 @OwliaSetupBot：**
+**选 @BotDropSetupBot：**
 ```
 ┌──────────────────────────────┐
-│  Setup via @OwliaSetupBot    │
+│  Setup via @BotDropSetupBot    │
 │                              │
 │  Which platform?             │
 │                              │
 │  ┌────────────────────────┐  │
 │  │ 📱 Telegram             │  │
-│  │  → Open @OwliaSetupBot  │  │
+│  │  → Open @BotDropSetupBot  │  │
 │  └────────────────────────┘  │
 │  ┌────────────────────────┐  │
 │  │ 💬 Discord              │  │
@@ -269,7 +269,7 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 │                              │
 │  Setup Code                  │
 │  ┌────────────────────────┐  │
-│  │ OWLIA-xxxxxxxxxxxx     │  │
+│  │ BOTDROP-xxxxxxxxxxxx     │  │
 │  └────────────────────────┘  │
 │                              │
 │  [  Connect & Start  ]       │
@@ -277,11 +277,11 @@ OpenClaw 支持多种认证方式，App 需要对应处理：
 └──────────────────────────────┘
 ```
 
-**@OwliaSetupBot 对话流程（Telegram 示例）：**
+**@BotDropSetupBot 对话流程（Telegram 示例）：**
 
 ```
 User: /start
-Bot:  🦉 Welcome to Owlia Setup!
+Bot:  🦉 Welcome to BotDrop Setup!
       I'll help you set up your personal AI bot.
       
       First, let's create your bot:
@@ -300,10 +300,10 @@ Bot:  ✅ Got it!
       
       Your setup code:
       ╔════════════════════════════╗
-      ║  OWLIA-tg-A7x9Kp2mB4...  ║
+      ║  BOTDROP-tg-A7x9Kp2mB4...  ║
       ╚════════════════════════════╝
       
-      → Go back to the Owlia app and paste this code.
+      → Go back to the BotDrop app and paste this code.
       
       (Code expires in 10 minutes)
 ```
@@ -359,7 +359,7 @@ App 解码后直接写入 openclaw.json 的 channels 配置。
 
 ```
 ┌──────────────────────────────┐
-│  🦉 Owlia                    │
+│  🦉 BotDrop                  │
 ├──────────────────────────────┤
 │                              │
 │     ● Running                │
@@ -376,7 +376,7 @@ App 解码后直接写入 openclaw.json 的 channels 配置。
 │                              │
 │  ─────────────────────────   │
 │                              │
-│  💡 Chat with Owlia on       │
+│  💡 Chat with BotDrop on     │
 │  Telegram to configure       │
 │  more settings               │
 │                              │
@@ -387,21 +387,21 @@ App 解码后直接写入 openclaw.json 的 channels 配置。
 ```
 
 - **极简**：状态 + 频道 + 重启/停止
-- 核心引导文案：**"Chat with Owlia on Telegram to configure more"**
+- 核心引导文案：**"Chat with BotDrop on Telegram to configure more"**
 - "Open Terminal" 放底部，高级用户才需要
 - 不做 Settings 页面 — 所有配置变更通过跟 bot 聊天完成
   - 用户："帮我加个 Discord"
-  - Owlia："好的，把 bot token 给我"
-  - → Owlia 修改 openclaw.json → 重启 gateway
+  - BotDrop："好的，把 bot token 给我"
+  - → BotDrop 修改 openclaw.json → 重启 gateway
 
 ---
 
 ## 技术实现
 
-### 1. OwliaService（后台命令执行 + Gateway 生命周期）
+### 1. BotDropService（后台命令执行 + Gateway 生命周期）
 
 ```java
-public class OwliaService extends Service {
+public class BotDropService extends Service {
     
     // 后台执行 shell 命令
     private CommandResult exec(String cmd) {
@@ -491,7 +491,7 @@ void startOAuthFlow(String provider) {
   "agents": {
     "defaults": {
       "model": "anthropic/claude-sonnet-4-5",
-      "workspace": "~/owlia"
+      "workspace": "~/botdrop"
     }
   },
   "channels": {
@@ -509,11 +509,11 @@ void startOAuthFlow(String provider) {
 }
 ```
 
-### 3. @OwliaSetupBot 架构
+### 3. @BotDropSetupBot 架构
 
 ```
 ┌──────────────────────────┐     ┌──────────────────────────┐
-│  @OwliaSetupBot (TG)     │     │  @OwliaSetupBot (DC)     │
+│  @BotDropSetupBot (TG)     │     │  @BotDropSetupBot (DC)     │
 │  (轻量 Node.js bot)       │     │  (轻量 Node.js bot)       │
 │                          │     │                          │
 │  功能：                    │     │  功能：                    │
@@ -526,10 +526,10 @@ void startOAuthFlow(String provider) {
               └───────────┬───────────────────┘
                           │
                    Setup Code 格式
-                   OWLIA-{platform}-{base64_payload}
+                   BOTDROP-{platform}-{base64_payload}
                           │
               ┌───────────┴───────────────────┐
-              │  Owlia App (Android)           │
+              │  BotDrop App (Android)         │
               │  解码 → 写 openclaw.json       │
               │       → 启动 gateway           │
               └───────────────────────────────┘
@@ -538,7 +538,7 @@ void startOAuthFlow(String provider) {
 **Setup Code**：自包含，不需要服务端存储
 
 ```
-OWLIA-tg-eyJ2IjoxLCJ0IjoiNzEyMzQ1Njc4OTpBQUY4eC4uLiIsInUiOiI5ODc2NTQzMjEifQ==
+BOTDROP-tg-eyJ2IjoxLCJ0IjoiNzEyMzQ1Njc4OTpBQUY4eC4uLiIsInUiOiI5ODc2NTQzMjEifQ==
        │    └─ base64({ "v":1, "t":"<bot_token>", "u":"<user_id>" })
        └─ platform: tg / dc
 ```
@@ -546,7 +546,7 @@ OWLIA-tg-eyJ2IjoxLCJ0IjoiNzEyMzQ1Njc4OTpBQUY4eC4uLiIsInUiOiI5ODc2NTQzMjEifQ==
 App 侧解码：
 ```java
 void applySetupCode(String code) {
-    // OWLIA-tg-xxxxx → 解析 platform + decode base64
+    // BOTDROP-tg-xxxxx → 解析 platform + decode base64
     String[] parts = code.split("-", 3);
     String platform = parts[1]; // "tg" or "dc"
     String payload = new String(Base64.decode(parts[2]));
@@ -570,11 +570,11 @@ void applySetupCode(String code) {
 Gateway 运行时通过 Android Foreground Service + 通知保活：
 
 ```
-🦉 Owlia is running
+🦉 BotDrop is running
    Connected to Telegram • Tap to manage
 ```
 
-### 5. 状态检测 (OwliaLauncherActivity)
+### 5. 状态检测 (BotDropLauncherActivity)
 
 ```java
 // 快速文件检测，不需要启动任何进程
@@ -592,9 +592,9 @@ else               → DashboardActivity (auto-start gateway if needed)
 
 ## Bot 辅助配置（后续功能）
 
-用户跟 Owlia 聊天时可以做：
+用户跟 BotDrop 聊天时可以做：
 
-| 用户说 | Owlia 做 |
+| 用户说 | BotDrop 做 |
 |--------|---------|
 | "帮我加一个 Discord bot" | 要 token → 修改 openclaw.json → restart |
 | "换成 GPT-4.5" | 修改 model → restart |
@@ -602,7 +602,7 @@ else               → DashboardActivity (auto-start gateway if needed)
 | "看看日志" | 读取 gateway logs → 发送 |
 | "重启一下" | `openclaw gateway restart` |
 
-这些操作 Owlia 通过 `gateway` tool 和 `exec` tool 就能完成。
+这些操作 BotDrop 通过 `gateway` tool 和 `exec` tool 就能完成。
 需要在 AGENTS.md / SOUL.md 里加入对应的指引。
 
 ---
@@ -610,16 +610,16 @@ else               → DashboardActivity (auto-start gateway if needed)
 ## 文件结构
 
 ```
-owlia-android/app/src/main/java/com/termux/app/owlia/
-├── OwliaLauncherActivity.java     # 启动路由
+botdrop-android/app/src/main/java/com/termux/app/botdrop/
+├── BotDropLauncherActivity.java     # 启动路由
 ├── SetupActivity.java             # 3 步向导
 ├── steps/
 │   ├── InstallFragment.java       # Step 1: Welcome + 自动安装
 │   ├── ApiKeyFragment.java        # Step 2: Provider + API Key
 │   └── ChannelFragment.java       # Step 3: Connect TG/DC
 ├── DashboardActivity.java         # 极简状态面板
-├── OwliaService.java              # 后台服务 (命令执行 + gateway)
-└── OwliaConfig.java               # 配置读写工具类
+├── BotDropService.java              # 后台服务 (命令执行 + gateway)
+└── BotDropConfig.java               # 配置读写工具类
 ```
 
 Layouts:
@@ -638,11 +638,11 @@ res/layout/
 ## 里程碑
 
 ### GUI-M0: 自动安装（不出现终端）
-- [ ] `OwliaLauncherActivity` + 状态检测
-- [ ] `OwliaService` 后台命令执行
+- [ ] `BotDropLauncherActivity` + 状态检测
+- [ ] `BotDropService` 后台命令执行
 - [ ] `SetupActivity` + ViewPager2
 - [ ] `InstallFragment`（自动安装 + 进度）
-- [ ] 修改 `AndroidManifest.xml`（launcher 改为 OwliaLauncherActivity）
+- [ ] 修改 `AndroidManifest.xml`（launcher 改为 BotDropLauncherActivity）
 - [ ] 测试：首次启动 → 自动安装 OpenClaw → 无终端
 
 ### GUI-M1: Auth（多 provider 多方式）
@@ -652,7 +652,7 @@ res/layout/
 - [ ] 配置写入（openclaw.json + auth credentials）
 - [ ] 测试：各 provider 的 auth 方式都能跑通
 
-### GUI-M2: @OwliaSetupBot + 频道连接
+### GUI-M2: @BotDropSetupBot + 频道连接
 - [ ] TG Helper Bot（Node.js，引导式对话 + 生成 setup code）
 - [ ] DC Helper Bot（同上）
 - [ ] `ChannelFragment`（输入 setup code 或手动填 token）
@@ -667,7 +667,7 @@ res/layout/
 - [ ] "Open Terminal" 入口
 
 ### GUI-M4: 打磨
-- [ ] Owlia 品牌 theme（颜色、icon）
+- [ ] BotDrop 品牌 theme（颜色、icon）
 - [ ] 错误处理细化 + 重试
 - [ ] 深色模式
 - [ ] 引导文案优化

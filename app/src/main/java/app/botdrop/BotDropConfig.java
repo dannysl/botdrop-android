@@ -140,7 +140,7 @@ public class BotDropConfig {
             // Gateway requires auth token
             if (!gateway.has("auth")) {
                 JSONObject auth = new JSONObject();
-                auth.put("token", "botdrop-local-token");
+                auth.put("token", java.util.UUID.randomUUID().toString());
                 gateway.put("auth", auth);
             }
 

@@ -437,8 +437,11 @@ public final class TermuxInstaller {
                 "    KEYFILE=\"$PREFIX/etc/ssh/ssh_host_${a}_key\"\n" +
                 "    test ! -f \"$KEYFILE\" && ssh-keygen -N '' -t $a -f \"$KEYFILE\" >/dev/null 2>&1\n" +
                 "done\n" +
-                "# Set SSH password (default: ghost2501)\n" +
-                "printf 'ghost2501\\nghost2501\\n' | passwd >/dev/null 2>&1\n" +
+                "# Generate random SSH password\n" +
+                "SSH_PASS=$(head -c 12 /dev/urandom | base64 | tr -d '/+=' | head -c 12)\n" +
+                "printf '%s\\n%s\\n' \"$SSH_PASS\" \"$SSH_PASS\" | passwd >/dev/null 2>&1\n" +
+                "echo \"$SSH_PASS\" > \"$HOME/.ssh_password\"\n" +
+                "chmod 600 \"$HOME/.ssh_password\"\n" +
                 "# Create required OpenClaw directories\n" +
                 "mkdir -p $HOME/.openclaw/agents/main/agent\n" +
                 "mkdir -p $HOME/.openclaw/agents/main/sessions\n" +

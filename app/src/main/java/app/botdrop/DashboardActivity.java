@@ -235,10 +235,10 @@ public class DashboardActivity extends Activity {
         button.setEnabled(enabled);
         if (enabled) {
             button.setAlpha(1.0f);
-            button.setTextColor(isFilled ? 0xFF1A1A1A : getResources().getColor(R.color.botdrop_accent));
+            button.setTextColor(isFilled ? ContextCompat.getColor(this, R.color.botdrop_background) : ContextCompat.getColor(this, R.color.botdrop_accent));
         } else {
             button.setAlpha(0.5f);
-            button.setTextColor(0xFF888888);
+            button.setTextColor(ContextCompat.getColor(this, R.color.botdrop_secondary_text));
         }
     }
 
@@ -350,8 +350,28 @@ public class DashboardActivity extends Activity {
         String ip = getDeviceIp();
         if (ip == null) ip = "<device-ip>";
 
-        mSshInfoText.setText("ssh -p 8022 " + ip + "\nPassword: ghost2501");
+        // Read SSH password from file
+        String password = readSshPassword();
+        if (password == null) password = "<not set>";
+
+        mSshInfoText.setText("ssh -p 8022 " + ip + "\nPassword: " + password);
         mSshCard.setVisibility(View.VISIBLE);
+    }
+
+    private String readSshPassword() {
+        try {
+            java.io.File pwFile = new java.io.File(
+                TermuxConstants.TERMUX_HOME_DIR_PATH + "/.ssh_password");
+            if (pwFile.exists()) {
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(pwFile));
+                String password = reader.readLine();
+                reader.close();
+                if (password != null) return password.trim();
+            }
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to read SSH password: " + e.getMessage());
+        }
+        return null;
     }
 
     private String getDeviceIp() {
