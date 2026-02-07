@@ -42,6 +42,7 @@ android {
     }
 
     defaultConfig {
+        applicationId "app.botdrop"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 118
@@ -52,7 +53,7 @@ android {
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
-        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = "app.botdrop"
         manifestPlaceholders.TERMUX_APP_NAME = "BotDrop"
         manifestPlaceholders.TERMUX_API_APP_NAME = "BotDrop:API"
         manifestPlaceholders.TERMUX_BOOT_APP_NAME = "BotDrop:Boot"
