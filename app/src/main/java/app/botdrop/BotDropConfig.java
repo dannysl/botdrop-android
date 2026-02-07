@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -14,11 +14,11 @@ import java.io.IOException;
 /**
  * Helper class for reading and writing OpenClaw configuration.
  * Handles openclaw.json at ~/.openclaw/openclaw.json
- * 
+ *
  * Thread-safe: All file operations are synchronized.
  */
-public class OwliaConfig {
-    
+public class BotDropConfig {
+
     private static final String LOG_TAG = "BotDropConfig";
     private static final String CONFIG_DIR = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw";
     private static final String CONFIG_FILE = CONFIG_DIR + "/openclaw.json";

@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -42,13 +42,13 @@ public class ChannelFragment extends Fragment {
     private Button mConnectButton;
     private TextView mErrorMessage;
 
-    private OwliaService mService;
+    private BotDropService mService;
     private boolean mBound = false;
 
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            OwliaService.LocalBinder binder = (OwliaService.LocalBinder) service;
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
             mService = binder.getService();
             mBound = true;
             Logger.logDebug(LOG_TAG, "Service connected");
@@ -90,7 +90,7 @@ public class ChannelFragment extends Fragment {
     public void onStart() {
         super.onStart();
         // Bind to service (matching InstallFragment lifecycle pattern)
-        Intent intent = new Intent(requireActivity(), OwliaService.class);
+        Intent intent = new Intent(requireActivity(), BotDropService.class);
         requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
     }
 

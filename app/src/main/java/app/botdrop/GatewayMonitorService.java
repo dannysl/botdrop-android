@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -44,8 +44,8 @@ public class GatewayMonitorService extends Service {
     private Runnable mMonitorRunnable;
     private PowerManager.WakeLock mWakeLock;
     private long mWakeLockLastAcquired = 0;
-    private OwliaService mOwliaService;
-    private boolean mOwliaServiceBound = false;
+    private BotDropService mBotDropService;
+    private boolean mBotDropServiceBound = false;
     private boolean mIsMonitoring = false;
     private String mCurrentStatus = "Starting...";
     private int mRestartAttempts = 0;
@@ -53,12 +53,12 @@ public class GatewayMonitorService extends Service {
     /**
      * Service connection for binding to BotDropService
      */
-    private ServiceConnection mOwliaServiceConnection = new ServiceConnection() {
+    private ServiceConnection mBotDropServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            OwliaService.LocalBinder binder = (OwliaService.LocalBinder) service;
-            mOwliaService = binder.getService();
-            mOwliaServiceBound = true;
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
+            mBotDropService = binder.getService();
+            mBotDropServiceBound = true;
             Logger.logInfo(LOG_TAG, "Bound to BotDropService");
 
             // Now that service is bound, start monitoring
@@ -69,8 +69,8 @@ public class GatewayMonitorService extends Service {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            mOwliaService = null;
-            mOwliaServiceBound = false;
+            mBotDropService = null;
+            mBotDropServiceBound = false;
             Logger.logInfo(LOG_TAG, "Disconnected from BotDropService");
         }
     };
@@ -81,8 +81,8 @@ public class GatewayMonitorService extends Service {
         Logger.logInfo(LOG_TAG, "Service created");
 
         // Bind to BotDropService for command execution
-        Intent intent = new Intent(this, OwliaService.class);
-        bindService(intent, mOwliaServiceConnection, Context.BIND_AUTO_CREATE);
+        Intent intent = new Intent(this, BotDropService.class);
+        bindService(intent, mBotDropServiceConnection, Context.BIND_AUTO_CREATE);
 
         // Initialize wake lock to handle Doze mode
         // Uses timeout with periodic re-acquisition to prevent orphaned locks
@@ -124,16 +124,16 @@ public class GatewayMonitorService extends Service {
         mHandler.removeCallbacksAndMessages(null);
 
         // Unbind from BotDropService
-        if (mOwliaServiceBound) {
+        if (mBotDropServiceBound) {
             try {
-                unbindService(mOwliaServiceConnection);
+                unbindService(mBotDropServiceConnection);
                 Logger.logInfo(LOG_TAG, "Unbound from BotDropService");
             } catch (IllegalArgumentException e) {
                 // Service was not bound or already unbound
                 Logger.logDebug(LOG_TAG, "Service was already unbound");
             }
-            mOwliaServiceBound = false;
-            mOwliaService = null;
+            mBotDropServiceBound = false;
+            mBotDropService = null;
         }
 
         // Release wake lock
@@ -189,13 +189,13 @@ public class GatewayMonitorService extends Service {
      */
     private void checkAndRestartGateway() {
         // Only proceed if service is bound
-        if (!mOwliaServiceBound || mOwliaService == null) {
+        if (!mBotDropServiceBound || mBotDropService == null) {
             Logger.logDebug(LOG_TAG, "BotDropService not bound yet, skipping check");
             return;
         }
 
         try {
-            mOwliaService.isGatewayRunning(result -> {
+            mBotDropService.isGatewayRunning(result -> {
                 try {
                     boolean isRunning = result.success && result.stdout.trim().equals("running");
 
@@ -223,7 +223,7 @@ public class GatewayMonitorService extends Service {
      */
     private void restartGateway() {
         // Only proceed if service is bound
-        if (!mOwliaServiceBound || mOwliaService == null) {
+        if (!mBotDropServiceBound || mBotDropService == null) {
             Logger.logError(LOG_TAG, "Cannot restart: BotDropService not bound");
             return;
         }
@@ -239,7 +239,7 @@ public class GatewayMonitorService extends Service {
         Logger.logInfo(LOG_TAG, "Restart attempt " + mRestartAttempts + "/" + MAX_RESTART_ATTEMPTS);
 
         try {
-            mOwliaService.startGateway(result -> {
+            mBotDropService.startGateway(result -> {
                 try {
                     if (result.success) {
                         Logger.logInfo(LOG_TAG, "Gateway started successfully");

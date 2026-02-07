@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -43,7 +43,7 @@ public class InstallFragment extends Fragment {
     private TextView mErrorMessage;
     private Button mRetryButton;
 
-    private OwliaService mService;
+    private BotDropService mService;
     private boolean mBound = false;
     private final AtomicBoolean mInstallationStarted = new AtomicBoolean(false);
 
@@ -53,7 +53,7 @@ public class InstallFragment extends Fragment {
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            OwliaService.LocalBinder binder = (OwliaService.LocalBinder) service;
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
             mService = binder.getService();
             mBound = true;
             Logger.logDebug(LOG_TAG, "Service connected");
@@ -106,7 +106,7 @@ public class InstallFragment extends Fragment {
     public void onStart() {
         super.onStart();
         // Bind to BotDropService
-        Intent intent = new Intent(getActivity(), OwliaService.class);
+        Intent intent = new Intent(getActivity(), BotDropService.class);
         requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
     }
 
@@ -172,7 +172,7 @@ public class InstallFragment extends Fragment {
 
         Logger.logInfo(LOG_TAG, "Starting OpenClaw installation");
 
-        mService.installOpenclaw(new OwliaService.InstallProgressCallback() {
+        mService.installOpenclaw(new BotDropService.InstallProgressCallback() {
             @Override
             public void onStepStart(int step, String message) {
                 updateStep(step, "●", message, false);
@@ -194,7 +194,7 @@ public class InstallFragment extends Fragment {
                 Logger.logInfo(LOG_TAG, "Installation complete");
 
                 // Get and display version
-                String version = OwliaService.getOpenclawVersion();
+                String version = BotDropService.getOpenclawVersion();
                 if (version != null) {
                     mStatusMessage.setText("Installation complete! (v" + version + ")");
                 } else {

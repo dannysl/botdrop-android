@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.content.Intent;
 import android.net.Uri;

@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.app.Service;
 import android.content.Intent;
@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * Background service for executing BotDrop-related commands and managing gateway lifecycle.
  * Handles OpenClaw installation, configuration, and gateway control without showing terminal UI.
  */
-public class OwliaService extends Service {
+public class BotDropService extends Service {
 
     private static final String LOG_TAG = "BotDropService";
 
@@ -30,8 +30,8 @@ public class OwliaService extends Service {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     public class LocalBinder extends Binder {
-        public OwliaService getService() {
-            return OwliaService.this;
+        public BotDropService getService() {
+            return BotDropService.this;
         }
     }
 

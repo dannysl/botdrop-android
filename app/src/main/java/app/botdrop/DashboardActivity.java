@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.app.Activity;
 import android.app.NotificationChannel;
@@ -54,7 +54,7 @@ public class DashboardActivity extends Activity {
     private View mSshCard;
     private TextView mSshInfoText;
 
-    private OwliaService mOwliaService;
+    private BotDropService mBotDropService;
     private boolean mBound = false;
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private Runnable mStatusRefreshRunnable;
@@ -62,8 +62,8 @@ public class DashboardActivity extends Activity {
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            OwliaService.LocalBinder binder = (OwliaService.LocalBinder) service;
-            mOwliaService = binder.getService();
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
+            mBotDropService = binder.getService();
             mBound = true;
             Logger.logDebug(LOG_TAG, "Service connected");
             
@@ -77,7 +77,7 @@ public class DashboardActivity extends Activity {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             mBound = false;
-            mOwliaService = null;
+            mBotDropService = null;
             Logger.logDebug(LOG_TAG, "Service disconnected");
         }
     };
@@ -117,7 +117,7 @@ public class DashboardActivity extends Activity {
         loadSshInfo();
 
         // Bind to service
-        Intent intent = new Intent(this, OwliaService.class);
+        Intent intent = new Intent(this, BotDropService.class);
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
     }
 
@@ -186,18 +186,18 @@ public class DashboardActivity extends Activity {
      * Refresh gateway status and uptime
      */
     private void refreshStatus() {
-        if (!mBound || mOwliaService == null) {
+        if (!mBound || mBotDropService == null) {
             return;
         }
 
         // Check if gateway is running
-        mOwliaService.isGatewayRunning(result -> {
+        mBotDropService.isGatewayRunning(result -> {
             boolean isRunning = result.success && result.stdout.trim().equals("running");
             updateStatusUI(isRunning);
 
             // Get uptime if running
             if (isRunning) {
-                mOwliaService.getGatewayUptime(uptimeResult -> {
+                mBotDropService.getGatewayUptime(uptimeResult -> {
                     if (uptimeResult.success) {
                         String uptime = uptimeResult.stdout.trim();
                         if (!uptime.equals("—")) {
@@ -236,7 +236,7 @@ public class DashboardActivity extends Activity {
      */
     private void loadChannelInfo() {
         try {
-            JSONObject config = OwliaConfig.readConfig();
+            JSONObject config = BotDropConfig.readConfig();
             if (config.has("channels")) {
                 JSONObject channels = config.getJSONObject("channels");
 
@@ -267,14 +267,14 @@ public class DashboardActivity extends Activity {
      * Start the gateway
      */
     private void startGateway() {
-        if (!mBound || mOwliaService == null) {
+        if (!mBound || mBotDropService == null) {
             return;
         }
 
         Toast.makeText(this, "Starting gateway...", Toast.LENGTH_SHORT).show();
         mStartButton.setEnabled(false);
 
-        mOwliaService.startGateway(result -> {
+        mBotDropService.startGateway(result -> {
             if (result.success) {
                 Toast.makeText(this, "Gateway started", Toast.LENGTH_SHORT).show();
                 refreshStatus();
@@ -290,14 +290,14 @@ public class DashboardActivity extends Activity {
      * Stop the gateway
      */
     private void stopGateway() {
-        if (!mBound || mOwliaService == null) {
+        if (!mBound || mBotDropService == null) {
             return;
         }
 
         Toast.makeText(this, "Stopping gateway...", Toast.LENGTH_SHORT).show();
         mStopButton.setEnabled(false);
 
-        mOwliaService.stopGateway(result -> {
+        mBotDropService.stopGateway(result -> {
             if (result.success) {
                 Toast.makeText(this, "Gateway stopped", Toast.LENGTH_SHORT).show();
                 refreshStatus();
@@ -313,14 +313,14 @@ public class DashboardActivity extends Activity {
      * Restart the gateway
      */
     private void restartGateway() {
-        if (!mBound || mOwliaService == null) {
+        if (!mBound || mBotDropService == null) {
             return;
         }
 
         Toast.makeText(this, "Restarting gateway...", Toast.LENGTH_SHORT).show();
         mRestartButton.setEnabled(false);
 
-        mOwliaService.restartGateway(result -> {
+        mBotDropService.restartGateway(result -> {
             if (result.success) {
                 Toast.makeText(this, "Gateway restarted", Toast.LENGTH_SHORT).show();
                 refreshStatus();

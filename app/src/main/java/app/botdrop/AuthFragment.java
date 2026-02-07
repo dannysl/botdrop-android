@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -67,7 +67,7 @@ public class AuthFragment extends Fragment {
     // Keep track of all provider views for radio button management
     private List<View> mAllProviderViews = new ArrayList<>();
 
-    private OwliaService mService;
+    private BotDropService mService;
     private boolean mBound = false;
 
     // Track delayed callbacks to prevent memory leaks
@@ -76,7 +76,7 @@ public class AuthFragment extends Fragment {
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            OwliaService.LocalBinder binder = (OwliaService.LocalBinder) service;
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
             mService = binder.getService();
             mBound = true;
             Logger.logDebug(LOG_TAG, "Service connected");
@@ -120,7 +120,7 @@ public class AuthFragment extends Fragment {
     public void onStart() {
         super.onStart();
         // Bind to BotDropService
-        Intent intent = new Intent(getActivity(), OwliaService.class);
+        Intent intent = new Intent(getActivity(), BotDropService.class);
         requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
     }
 
@@ -424,8 +424,8 @@ public class AuthFragment extends Fragment {
         Logger.logInfo(LOG_TAG, "Saving credentials for provider: " + providerId);
 
         // Write API key and provider config directly (no CLI dependency)
-        boolean keyWritten = OwliaConfig.setApiKey(providerId, credential);
-        boolean providerWritten = OwliaConfig.setProvider(providerId, model);
+        boolean keyWritten = BotDropConfig.setApiKey(providerId, credential);
+        boolean providerWritten = BotDropConfig.setProvider(providerId, model);
 
         if (keyWritten && providerWritten) {
             Logger.logInfo(LOG_TAG, "Auth configured successfully");

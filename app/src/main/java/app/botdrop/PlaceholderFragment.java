@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.os.Bundle;
 import android.view.LayoutInflater;

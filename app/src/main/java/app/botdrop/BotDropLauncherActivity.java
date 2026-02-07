@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.app.Activity;
 import android.content.Context;
@@ -35,7 +35,7 @@ import org.json.JSONObject;
  * 3. If OpenClaw not configured -> SetupActivity (auth + channel setup)
  * 4. All ready -> DashboardActivity
  */
-public class OwliaLauncherActivity extends Activity {
+public class BotDropLauncherActivity extends Activity {
 
     private static final String LOG_TAG = "BotDropLauncherActivity";
     private static final int REQUEST_CODE_NOTIFICATION_SETTINGS = 1001;
@@ -233,7 +233,7 @@ public class OwliaLauncherActivity extends Activity {
 
     private void checkAndRoute() {
         // Check 1: Bootstrap installed?
-        if (!OwliaService.isBootstrapInstalled()) {
+        if (!BotDropService.isBootstrapInstalled()) {
             Logger.logInfo(LOG_TAG, "Bootstrap not ready, waiting for TermuxInstaller");
             mStatusText.setText("Setting up environment...");
 
@@ -242,7 +242,7 @@ public class OwliaLauncherActivity extends Activity {
         }
 
         // Check 2: OpenClaw configured (API key)?
-        if (!OwliaService.isOpenclawConfigured()) {
+        if (!BotDropService.isOpenclawConfigured()) {
             Logger.logInfo(LOG_TAG, "OpenClaw not configured, routing to auth setup");
             mStatusText.setText("Setup required...");
 
@@ -254,7 +254,7 @@ public class OwliaLauncherActivity extends Activity {
         }
 
         // Check 3: OpenClaw installed?
-        if (!OwliaService.isOpenclawInstalled()) {
+        if (!BotDropService.isOpenclawInstalled()) {
             Logger.logInfo(LOG_TAG, "OpenClaw not installed, routing to agent selection");
             mStatusText.setText("Preparing installation...");
 
@@ -288,7 +288,7 @@ public class OwliaLauncherActivity extends Activity {
 
     private boolean hasChannelConfigured() {
         try {
-            JSONObject config = OwliaConfig.readConfig();
+            JSONObject config = BotDropConfig.readConfig();
             if (config.has("channels")) {
                 JSONObject channels = config.getJSONObject("channels");
                 return channels.has("telegram") || channels.has("discord");

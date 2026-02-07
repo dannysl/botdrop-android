@@ -1,4 +1,4 @@
-package com.termux.app.owlia;
+package app.botdrop;
 
 import android.util.Base64;
 
@@ -111,7 +111,7 @@ public class ChannelSetupHelper {
      */
     public static boolean writeChannelConfig(String platform, String botToken, String ownerId) {
         try {
-            JSONObject config = OwliaConfig.readConfig();
+            JSONObject config = BotDropConfig.readConfig();
 
             if (!config.has("channels")) {
                 config.put("channels", new JSONObject());
@@ -156,7 +156,7 @@ public class ChannelSetupHelper {
             entries.put(platform, pluginEntry);
 
             Logger.logInfo(LOG_TAG, "Writing channel config for platform: " + platform);
-            return OwliaConfig.writeConfig(config);
+            return BotDropConfig.writeConfig(config);
 
         } catch (JSONException e) {
             Logger.logError(LOG_TAG, "Failed to write channel config: " + e.getMessage());
