@@ -35,9 +35,9 @@ jobs:
 
       - name: Download bootstrap archives
         run: |
-          echo "Downloading bootstrap archives from owlia-packages releases..."
+          echo "Downloading bootstrap archives from botdrop-packages releases..."
           cd app/src/main/cpp
-          url="https://github.com/louzhixian/owlia-packages/releases/latest/download/bootstrap-aarch64.zip"
+          url="https://github.com/louzhixian/botdrop-packages/releases/latest/download/bootstrap-aarch64.zip"
           echo "Downloading ${url}..."
           curl -fsSL -o "bootstrap-aarch64.zip" "$url"
           echo "✅ Downloaded bootstrap-aarch64.zip ($(stat --printf='%s' bootstrap-aarch64.zip) bytes)"

@@ -180,7 +180,6 @@ def downloadBootstrap(String arch) {
         return
     }
 
-    // TODO: Confirm GitHub repo has been renamed from owlia-packages to botdrop-packages
     def remoteUrl = "https://github.com/louzhixian/botdrop-packages/releases/latest/download/bootstrap-" + arch + ".zip"
     logger.quiet("Downloading " + remoteUrl + " ...")
 
