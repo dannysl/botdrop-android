@@ -6,7 +6,7 @@ route = "api.botdrop.app/*"
 
 [vars]
 GITHUB_REPO = "zhixianio/botdrop-android"
-CACHE_TTL_SECONDS = "900"
+CACHE_TTL_SECONDS = "21600"
 
 # Uncomment after creating KV namespace:
 #   npx wrangler kv namespace create CACHE

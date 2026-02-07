@@ -6,6 +6,7 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.os.Build;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.system.Os;
 import android.util.Pair;
 import android.view.WindowManager;
@@ -118,6 +119,10 @@ public final class TermuxInstaller {
         new Thread() {
             @Override
             public void run() {
+                // Acquire a WakeLock to prevent CPU sleep during bootstrap extraction
+                PowerManager pm = (PowerManager) activity.getSystemService(Context.POWER_SERVICE);
+                PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "app.botdrop:bootstrap");
+                wakeLock.acquire(10 * 60 * 1000L); // 10 min timeout as safety net
                 try {
                     Logger.logInfo(LOG_TAG, "Installing " + TermuxConstants.TERMUX_APP_NAME + " bootstrap packages.");
 
@@ -230,6 +235,7 @@ public final class TermuxInstaller {
                     showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
 
                 } finally {
+                    if (wakeLock.isHeld()) wakeLock.release();
                     activity.runOnUiThread(() -> {
                         try {
                             progress.dismiss();

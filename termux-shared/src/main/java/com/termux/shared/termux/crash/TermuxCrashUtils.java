@@ -342,11 +342,13 @@ public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
         // Must ensure result code for PendingIntents and id for notification are unique otherwise will override previous
         int nextNotificationId = TermuxNotificationUtils.getNextNotificationId(termuxPackageContext);
 
-        PendingIntent contentIntent = PendingIntent.getActivity(termuxPackageContext, nextNotificationId, result.contentIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        // Use currentPackageContext (the actual Activity context) for PendingIntent creation
+        // to avoid SecurityException when namespace differs from applicationId
+        PendingIntent contentIntent = PendingIntent.getActivity(currentPackageContext, nextNotificationId, result.contentIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 
         PendingIntent deleteIntent = null;
         if (result.deleteIntent != null)
-            deleteIntent = PendingIntent.getBroadcast(termuxPackageContext, nextNotificationId, result.deleteIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+            deleteIntent = PendingIntent.getBroadcast(currentPackageContext, nextNotificationId, result.deleteIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 
         // Setup the notification channel if not already set up
         setupCrashReportsNotificationChannel(termuxPackageContext);

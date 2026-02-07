@@ -16,6 +16,7 @@ async function handleVersion(request, env, url) {
 
   // Try KV cache first
   const cacheKey = 'latest_release';
+  const staleCacheKey = 'latest_release_stale';
   let release = null;
 
   if (env.CACHE) {
@@ -33,6 +34,11 @@ async function handleVersion(request, env, url) {
       );
 
       if (!res.ok) {
+        // Serve stale cache if GitHub API fails
+        if (env.CACHE) {
+          const stale = await env.CACHE.get(staleCacheKey, 'json');
+          if (stale) return jsonResponse(stale);
+        }
         return jsonResponse({ error: 'upstream_error' }, 502);
       }
 
@@ -47,12 +53,18 @@ async function handleVersion(request, env, url) {
         min_supported: '0.1.0',
       };
 
-      // Store in KV with TTL
+      // Store in KV with TTL + a long-lived stale copy as fallback
       if (env.CACHE) {
-        const ttl = parseInt(env.CACHE_TTL_SECONDS, 10) || 900;
+        const ttl = parseInt(env.CACHE_TTL_SECONDS, 10) || 21600;
         await env.CACHE.put(cacheKey, JSON.stringify(release), { expirationTtl: ttl });
+        await env.CACHE.put(staleCacheKey, JSON.stringify(release));
       }
     } catch (err) {
+      // Serve stale cache on network errors
+      if (env.CACHE) {
+        const stale = await env.CACHE.get(staleCacheKey, 'json');
+        if (stale) return jsonResponse(stale);
+      }
       return jsonResponse({ error: 'fetch_failed' }, 502);
     }
   }
