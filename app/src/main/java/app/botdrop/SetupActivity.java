@@ -8,6 +8,7 @@ import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -103,6 +104,9 @@ public class SetupActivity extends AppCompatActivity {
         });
 
         Logger.logDebug(LOG_TAG, "SetupActivity created, starting at step " + startStep);
+
+        // Check for cached config and offer restore
+        showRestoreConfigDialog();
     }
 
     /**
@@ -144,6 +148,70 @@ public class SetupActivity extends AppCompatActivity {
             Intent intent = new Intent(this, DashboardActivity.class);
             startActivity(intent);
             finish();
+        }
+    }
+
+    /**
+     * Check for cached config and offer to restore it.
+     * Called in onCreate() before showing the first setup fragment.
+     */
+    private void showRestoreConfigDialog() {
+        if (!ConfigTemplateCache.hasTemplate(this)) {
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+            .setTitle("Restore Configuration?")
+            .setMessage("Use your previous configuration to set up quickly.")
+            .setPositiveButton("Use Previous", (dialog, which) -> {
+                applyTemplateAndContinue();
+            })
+            .setNegativeButton("Start Fresh", (dialog, which) -> {
+                dialog.dismiss();
+            })
+            .setCancelable(false)
+            .show();
+    }
+
+    /**
+     * Apply cached config template and navigate to appropriate step.
+     * If Telegram is configured, go to dashboard. Otherwise, skip to channel setup.
+     */
+    private void applyTemplateAndContinue() {
+        ConfigTemplate template = ConfigTemplateCache.loadTemplate(this);
+        if (template == null || !template.isValid()) {
+            Toast.makeText(this, "Failed to load previous configuration", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean success = ConfigTemplateCache.applyTemplate(this, template);
+        if (!success) {
+            Toast.makeText(this, "Failed to apply configuration", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Toast.makeText(this, "Configuration restored", Toast.LENGTH_SHORT).show();
+
+        // Check if Telegram is configured
+        if (template.tgBotToken != null && !template.tgBotToken.isEmpty()) {
+            // Full config restored, go to dashboard
+            Intent intent = new Intent(this, DashboardActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        } else {
+            // Partial config, jump to channel setup step
+            showSetupStep(STEP_CHANNEL);
+        }
+    }
+
+    /**
+     * Show a specific setup step.
+     * @param step The step index to show
+     */
+    private void showSetupStep(int step) {
+        if (step >= 0 && step < STEP_COUNT) {
+            mViewPager.setCurrentItem(step, true);
         }
     }
 
