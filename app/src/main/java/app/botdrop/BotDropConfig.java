@@ -338,23 +338,27 @@ public class BotDropConfig {
                     JSONObject telegram = channels.optJSONObject("telegram");
                     if (telegram != null) {
                         JSONObject network = telegram.optJSONObject("network");
-                        if (network == null) {
-                            network = new JSONObject();
-                            telegram.put("network", network);
-                            changed = true;
-                        }
+                        if (network != null) {
+                            if (network.has("autoSelectFamilyAttemptTimeout")) {
+                                network.remove("autoSelectFamilyAttemptTimeout");
+                                changed = true;
+                                Logger.logInfo(LOG_TAG, "Removed deprecated key: channels.telegram.network.autoSelectFamilyAttemptTimeout");
+                            }
 
-                        if (network.has("autoSelectFamilyAttemptTimeout")) {
-                            network.remove("autoSelectFamilyAttemptTimeout");
-                            changed = true;
-                            Logger.logInfo(LOG_TAG, "Removed deprecated key: channels.telegram.network.autoSelectFamilyAttemptTimeout");
-                        }
+                            // BotDrop prefers forcing IPv4 via NODE_OPTIONS; leaving OpenClaw's
+                            // autoSelectFamily behavior at its default avoids long first-connect
+                            // delays seen on some Android/proot environments.
+                            if (network.has("autoSelectFamily")) {
+                                network.remove("autoSelectFamily");
+                                changed = true;
+                                Logger.logInfo(LOG_TAG, "Removed key: channels.telegram.network.autoSelectFamily");
+                            }
 
-                        // Ensure Telegram network uses Happy Eyeballs behavior on Android.
-                        if (!network.optBoolean("autoSelectFamily", false)) {
-                            network.put("autoSelectFamily", true);
-                            changed = true;
-                            Logger.logInfo(LOG_TAG, "Set channels.telegram.network.autoSelectFamily=true");
+                            // If network becomes empty, remove it to keep config clean.
+                            if (network.length() == 0) {
+                                telegram.remove("network");
+                                changed = true;
+                            }
                         }
                     }
                 }

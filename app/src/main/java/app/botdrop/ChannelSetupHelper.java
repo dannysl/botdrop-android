@@ -126,11 +126,6 @@ public class ChannelSetupHelper {
                 telegram.put("dmPolicy", "allowlist");
                 telegram.put("groupPolicy", "allowlist");
                 telegram.put("streamMode", "partial");
-                // Android/proot environments often have broken IPv6.
-                // Force Happy Eyeballs behavior to allow IPv4 fallback.
-                JSONObject network = new JSONObject();
-                network.put("autoSelectFamily", true);
-                telegram.put("network", network);
                 JSONArray allowFrom = new JSONArray();
                 allowFrom.put(ownerId);
                 telegram.put("allowFrom", allowFrom);

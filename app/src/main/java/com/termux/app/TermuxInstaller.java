@@ -490,6 +490,7 @@ public final class TermuxInstaller {
                 "  exit 127\n" +
                 "fi\n" +
                 "export SSL_CERT_FILE=\"$PREFIX/etc/tls/cert.pem\"\n" +
+                "export NODE_OPTIONS=\"--dns-result-order=ipv4first\"\n" +
                 "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n" +
                 "BOTDROP_OPENCLAW_WRAPPER\n" +
                 "    chmod 755 $PREFIX/bin/openclaw\n" +
