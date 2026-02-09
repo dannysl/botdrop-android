@@ -154,6 +154,21 @@ public class ChannelFragment extends Fragment {
             return;
         }
 
+        // Update cache with Telegram info
+        try {
+            ConfigTemplate template = ConfigTemplateCache.loadTemplate(requireContext());
+            if (template == null) {
+                template = new ConfigTemplate();
+            }
+            template.tgBotToken = token;
+            template.tgUserId = userId;
+            ConfigTemplateCache.saveTemplate(requireContext(), template);
+
+            Logger.logInfo(LOG_TAG, "Telegram config saved to cache");
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to save Telegram config to cache: " + e.getMessage());
+        }
+
         // Start gateway
         startGateway();
     }
