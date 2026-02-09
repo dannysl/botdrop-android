@@ -107,6 +107,21 @@ See: `docs/troubleshooting/2026-02-09-slim-bootstrap-ssl-issue.md`
 
 **TL;DR:** Slim bootstraps may break Node.js fetch. Always test HTTPS requests after bootstrap changes.
 
+### Telegram Bot Not Working - "fetch failed" Errors
+
+See: `docs/troubleshooting/2026-02-09-telegram-fetch-ipv6-issue.md`
+
+**TL;DR:** OpenClaw defaults `autoSelectFamily=false` for Node.js 22+, causing IPv6 connection failures. Fix by adding to `~/.openclaw/openclaw.json`:
+
+```json
+"channels": {
+  "telegram": {
+    "network": { "autoSelectFamily": true },
+    ...
+  }
+}
+```
+
 ## Related Documentation
 
 - `CONTRIBUTING.md` - Contribution guidelines
