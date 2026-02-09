@@ -37,12 +37,9 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
 
     private static final String LOG_TAG = "AuthFragment";
 
-    // Provider selection views
+    // Model selection view
     private View mProviderSelectionView;
-    private LinearLayout mPopularProvidersContainer;
-    private LinearLayout mMoreProvidersContainer;
-    private TextView mMoreToggle;
-    
+
     // Auth input views (from fragment_botdrop_auth_input.xml)
     private View mAuthInputView;
     private TextView mBackButton;
@@ -56,23 +53,11 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
     private LinearLayout mStatusContainer;
     private TextView mStatusText;
     private Button mVerifyButton;
-    
-    private List<ProviderInfo> mPopularProviders;
-    private List<ProviderInfo> mMoreProviders;
-    
+
     private ProviderInfo mSelectedProvider;
     private ProviderInfo.AuthMethod mSelectedAuthMethod;
     private String mSelectedModel = null; // Format: "provider/model"
-    private boolean mMoreExpanded = false;
     private boolean mPasswordVisible = false;
-
-    // Model selection UI
-    private LinearLayout mModelSection;
-    private Button mSelectModelButton;
-    private TextView mSelectedModelText;
-
-    // Keep track of all provider views for radio button management
-    private List<View> mAllProviderViews = new ArrayList<>();
 
     private BotDropService mService;
     private boolean mBound = false;
@@ -108,16 +93,16 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
             ViewGroup.LayoutParams.MATCH_PARENT));
         containerLayout.setOrientation(LinearLayout.VERTICAL);
 
-        // Inflate provider selection view
+        // Inflate model selection view (simplified)
         mProviderSelectionView = inflater.inflate(R.layout.fragment_botdrop_auth, containerLayout, false);
         containerLayout.addView(mProviderSelectionView);
-        
+
         // Inflate auth input view
         mAuthInputView = inflater.inflate(R.layout.fragment_botdrop_auth_input, containerLayout, false);
         mAuthInputView.setVisibility(View.GONE);
         containerLayout.addView(mAuthInputView);
 
-        setupProviderSelectionView();
+        setupModelSelectionView();
         setupAuthInputView();
 
         return containerLayout;
@@ -149,9 +134,6 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
             mVerifyButton.removeCallbacks(mNavigationRunnable);
             mNavigationRunnable = null;
         }
-
-        // Release view references to prevent memory leak
-        mAllProviderViews.clear();
     }
 
     @Override
@@ -172,39 +154,44 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
         }
     }
 
-    private void setupProviderSelectionView() {
-        mPopularProvidersContainer = mProviderSelectionView.findViewById(R.id.auth_popular_providers);
-        mMoreProvidersContainer = mProviderSelectionView.findViewById(R.id.auth_more_providers);
-        mMoreToggle = mProviderSelectionView.findViewById(R.id.auth_more_toggle);
+    private void setupModelSelectionView() {
+        EditText modelText = mProviderSelectionView.findViewById(R.id.auth_model_text);
+        Button selectButton = mProviderSelectionView.findViewById(R.id.auth_select_button);
 
-        // Model selection UI
-        mModelSection = mProviderSelectionView.findViewById(R.id.auth_model_section);
-        mSelectModelButton = mProviderSelectionView.findViewById(R.id.auth_select_model_button);
-        mSelectedModelText = mProviderSelectionView.findViewById(R.id.auth_selected_model_text);
-
-        // Set up Select Model button
-        mSelectModelButton.setOnClickListener(v -> showModelSelectorFullscreen());
-
-        // Load provider data
-        mPopularProviders = ProviderInfo.getPopularProviders();
-        mMoreProviders = ProviderInfo.getMoreProviders();
-
-        // Populate popular providers
-        for (ProviderInfo provider : mPopularProviders) {
-            View providerView = createProviderView(provider);
-            mPopularProvidersContainer.addView(providerView);
-            mAllProviderViews.add(providerView);
+        // Disable Next button initially
+        if (getActivity() instanceof SetupActivity) {
+            ((SetupActivity) getActivity()).setNextEnabled(false);
         }
 
-        // Populate more providers
-        for (ProviderInfo provider : mMoreProviders) {
-            View providerView = createProviderView(provider);
-            mMoreProvidersContainer.addView(providerView);
-            mAllProviderViews.add(providerView);
-        }
+        // Set up Select button
+        selectButton.setOnClickListener(v -> {
+            ModelSelectorDialog dialog = new ModelSelectorDialog(requireContext()); // No service needed
+            dialog.show((provider, model) -> {
+                if (provider != null && model != null) {
+                    String fullModel = provider + "/" + model;
+                    mSelectedModel = fullModel;
+                    mSelectedProvider = ProviderInfo.getPopularProviders().stream()
+                        .filter(p -> p.getId().equals(provider))
+                        .findFirst()
+                        .orElse(ProviderInfo.getMoreProviders().stream()
+                            .filter(p -> p.getId().equals(provider))
+                            .findFirst()
+                            .orElse(null));
 
-        // Set up "More providers" toggle
-        mMoreToggle.setOnClickListener(v -> toggleMoreProviders());
+                    // Update text field
+                    modelText.setText(fullModel);
+
+                    // Enable Next button
+                    if (getActivity() instanceof SetupActivity) {
+                        ((SetupActivity) getActivity()).setNextEnabled(true);
+                    }
+
+                    Logger.logInfo(LOG_TAG, "Model selected: " + fullModel);
+                } else {
+                    Logger.logInfo(LOG_TAG, "Model selection cancelled");
+                }
+            });
+        });
     }
 
     private void setupAuthInputView() {
@@ -233,103 +220,14 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
         mVerifyButton.setOnClickListener(v -> verifyAndContinue());
     }
 
-    private View createProviderView(ProviderInfo provider) {
-        LayoutInflater inflater = LayoutInflater.from(requireContext());
-        View view = inflater.inflate(R.layout.item_provider, null);
-
-        RadioButton radio = view.findViewById(R.id.provider_radio);
-        TextView name = view.findViewById(R.id.provider_name);
-        TextView description = view.findViewById(R.id.provider_description);
-        TextView recommendedBadge = view.findViewById(R.id.provider_recommended_badge);
-
-        name.setText(provider.getName());
-        description.setText(provider.getDescription());
-        
-        if (provider.isRecommended()) {
-            recommendedBadge.setVisibility(View.VISIBLE);
-        } else {
-            recommendedBadge.setVisibility(View.GONE);
-        }
-
-        // Handle click on entire card
-        view.setOnClickListener(v -> onProviderSelected(provider, radio));
-
-        return view;
-    }
-
-    private void onProviderSelected(ProviderInfo provider, RadioButton selectedRadio) {
-        Logger.logInfo(LOG_TAG, "Provider selected: " + provider.getName());
-
-        mSelectedProvider = provider;
-
-        // Update all radio buttons
-        for (View providerView : mAllProviderViews) {
-            RadioButton radio = providerView.findViewById(R.id.provider_radio);
-            radio.setChecked(radio == selectedRadio);
-        }
-
-        // Show model selection section
-        mModelSection.setVisibility(View.VISIBLE);
-
-        // Reset model selection
-        mSelectedModel = null;
-        mSelectedModelText.setText("No model selected");
-        mSelectedModelText.setTextColor(getResources().getColor(R.color.botdrop_secondary_text, null));
-
-        // Disable Next button until model is selected
-        if (getActivity() instanceof SetupActivity) {
-            ((SetupActivity) getActivity()).setNextEnabled(false);
-        }
-    }
-
     @Override
     public boolean handleNext() {
-        // If on provider selection page with model selected, show auth input
-        if (mProviderSelectionView.getVisibility() == View.VISIBLE && mSelectedModel != null) {
+        // If on model selection page with model selected, show auth input
+        if (mProviderSelectionView.getVisibility() == View.VISIBLE && mSelectedModel != null && mSelectedProvider != null) {
             showAuthInput(mSelectedProvider);
             return true; // We handled it
         }
         return false; // Let default behavior proceed
-    }
-
-    private void showModelSelectorFullscreen() {
-        if (!mBound || mService == null) {
-            Toast.makeText(requireContext(), "Service not available. Please try again.", Toast.LENGTH_SHORT).show();
-            Logger.logError(LOG_TAG, "Cannot show model selector: service not bound");
-            return;
-        }
-
-        ModelSelectorDialog dialog = new ModelSelectorDialog(requireContext(), mService);
-        dialog.show((provider, model) -> {
-            if (provider != null && model != null) {
-                mSelectedModel = provider + "/" + model;
-                Logger.logInfo(LOG_TAG, "Model selected: " + mSelectedModel);
-
-                // Update the display text
-                mSelectedModelText.setText(mSelectedModel);
-                mSelectedModelText.setTextColor(getResources().getColor(R.color.botdrop_on_background, null));
-
-                // Enable Next button now that model is selected
-                if (getActivity() instanceof SetupActivity) {
-                    ((SetupActivity) getActivity()).setNextEnabled(true);
-                }
-            } else {
-                // User cancelled - do nothing
-                Logger.logInfo(LOG_TAG, "Model selection cancelled");
-            }
-        });
-    }
-
-    private void toggleMoreProviders() {
-        mMoreExpanded = !mMoreExpanded;
-        
-        if (mMoreExpanded) {
-            mMoreProvidersContainer.setVisibility(View.VISIBLE);
-            mMoreToggle.setText("More providers ▲");
-        } else {
-            mMoreProvidersContainer.setVisibility(View.GONE);
-            mMoreToggle.setText("More providers ▼");
-        }
     }
 
     private void showProviderSelection() {

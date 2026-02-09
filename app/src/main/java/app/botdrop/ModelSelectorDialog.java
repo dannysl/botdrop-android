@@ -52,6 +52,14 @@ public class ModelSelectorDialog extends Dialog {
         this.mService = service;
     }
 
+    /**
+     * Constructor for use during setup (when openclaw not yet installed)
+     */
+    public ModelSelectorDialog(@NonNull Context context) {
+        super(context);
+        this.mService = null; // Will use static model list
+    }
+
     public void show(ModelSelectedCallback callback) {
         this.mCallback = callback;
         super.show();
@@ -120,11 +128,15 @@ public class ModelSelectorDialog extends Dialog {
         showLoading();
 
         if (mService == null) {
-            showError("Service not available");
+            // Use static model list (during setup, openclaw not yet installed)
+            List<ModelInfo> models = ModelDatabase.getAllModels();
+            mAllModels = models;
+            mAdapter.updateList(models);
+            showList();
             return;
         }
 
-        // Execute openclaw models list command
+        // Use openclaw CLI (after installation, in dashboard)
         mService.executeCommand("termux-chroot openclaw models list", result -> {
             if (!result.success) {
                 showError("Failed to load models. Please try again.");
