@@ -21,10 +21,10 @@ import com.termux.shared.logger.Logger;
 
 /**
  * Setup wizard with 4 steps:
- * Step 0 (STEP_API_KEY): AI Provider + Auth
- * Step 1 (STEP_AGENT_SELECT): Choose which agent to install
- * Step 2 (STEP_INSTALL): Install selected agent
- * Step 3 (STEP_CHANNEL): Connect channel
+ * Step 0 (STEP_INSTALL): Install openclaw
+ * Step 1 (STEP_API_KEY): Choose AI + API Key
+ * Step 2 (STEP_AGENT_SELECT): Agent Selection
+ * Step 3 (STEP_CHANNEL): Telegram Config
  */
 
 public class SetupActivity extends AppCompatActivity {
@@ -79,7 +79,7 @@ public class SetupActivity extends AppCompatActivity {
         mViewPager.setUserInputEnabled(false); // Disable swipe, only programmatic navigation
 
         // Start at specified step
-        int startStep = getIntent().getIntExtra(EXTRA_START_STEP, STEP_API_KEY);
+        int startStep = getIntent().getIntExtra(EXTRA_START_STEP, STEP_INSTALL);
         mViewPager.setCurrentItem(startStep, false);
 
         // Set up navigation buttons (hidden by default, fragments can show if needed)

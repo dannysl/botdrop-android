@@ -117,6 +117,20 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        // Show navigation buttons when on provider selection page
+        if (getActivity() instanceof SetupActivity) {
+            SetupActivity activity = (SetupActivity) getActivity();
+            if (mProviderSelectionView.getVisibility() == View.VISIBLE) {
+                activity.setNavigationVisible(true);
+                activity.setBackEnabled(false); // First step after install
+                activity.setNextEnabled(mSelectedModel != null);
+            }
+        }
+    }
+
+    @Override
     public void onStop() {
         super.onStop();
         if (mBound) {
