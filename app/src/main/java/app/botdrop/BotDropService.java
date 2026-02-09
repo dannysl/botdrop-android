@@ -48,6 +48,13 @@ public class BotDropService extends Service {
     }
 
     @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        // Keep the service alive even if no Activity is bound. GatewayMonitorService depends on
+        // this service to execute gateway control commands while the app is backgrounded.
+        return START_STICKY;
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
         mExecutor.shutdown();

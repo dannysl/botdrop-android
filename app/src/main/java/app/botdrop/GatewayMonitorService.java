@@ -50,6 +50,7 @@ public class GatewayMonitorService extends Service {
     private String mCurrentStatus = "Starting...";
     private int mRestartAttempts = 0;
     private boolean mRestartInFlight = false;
+    private boolean mRebindScheduled = false;
 
     /**
      * Service connection for binding to BotDropService
@@ -73,16 +74,41 @@ public class GatewayMonitorService extends Service {
             mBotDropService = null;
             mBotDropServiceBound = false;
             Logger.logInfo(LOG_TAG, "Disconnected from BotDropService");
+
+            // In the background the bound service may be reclaimed. Keep trying to rebind
+            // so gateway monitoring continues without requiring the Activity to be foreground.
+            scheduleRebind();
         }
     };
+
+    private void scheduleRebind() {
+        if (mRebindScheduled) return;
+        mRebindScheduled = true;
+        mHandler.postDelayed(() -> {
+            mRebindScheduled = false;
+            if (mBotDropServiceBound) return;
+            try {
+                Intent intent = new Intent(this, BotDropService.class);
+                // Ensure service is started so the binding has a live target.
+                startService(intent);
+                bindService(intent, mBotDropServiceConnection, Context.BIND_AUTO_CREATE);
+                Logger.logInfo(LOG_TAG, "Rebinding to BotDropService");
+            } catch (Exception e) {
+                Logger.logError(LOG_TAG, "Failed to rebind BotDropService: " + e.getMessage());
+                scheduleRebind();
+            }
+        }, 2000);
+    }
 
     @Override
     public void onCreate() {
         super.onCreate();
         Logger.logInfo(LOG_TAG, "Service created");
 
-        // Bind to BotDropService for command execution
+        // Start + bind to BotDropService for command execution. Binding alone can be fragile
+        // when the app is backgrounded; starting keeps it alive.
         Intent intent = new Intent(this, BotDropService.class);
+        startService(intent);
         bindService(intent, mBotDropServiceConnection, Context.BIND_AUTO_CREATE);
 
         // Initialize wake lock to handle Doze mode
@@ -191,7 +217,8 @@ public class GatewayMonitorService extends Service {
     private void checkAndRestartGateway() {
         // Only proceed if service is bound
         if (!mBotDropServiceBound || mBotDropService == null) {
-            Logger.logDebug(LOG_TAG, "BotDropService not bound yet, skipping check");
+            Logger.logDebug(LOG_TAG, "BotDropService not bound yet, scheduling rebind");
+            scheduleRebind();
             return;
         }
 
