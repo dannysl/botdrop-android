@@ -1,0 +1,1 @@
+Run AI agents on your Android phone — no terminal, no CLI, just a guided setup.
