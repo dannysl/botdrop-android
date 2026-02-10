@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.net.ConnectivityManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,10 +49,12 @@ public class BotDropLauncherActivity extends Activity {
     private TextView mStatusText;
     private Button mNotificationButton;
     private Button mBatteryButton;
+    private Button mBackgroundSettingsButton;
     private Button mContinueButton;
     private Button mCheckUpdateButton;
     private TextView mNotificationStatus;
     private TextView mBatteryStatus;
+    private TextView mBackgroundHintText;
 
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private boolean mPermissionsPhaseComplete = false;
@@ -66,10 +69,12 @@ public class BotDropLauncherActivity extends Activity {
         mStatusText = findViewById(R.id.launcher_status_text);
         mNotificationButton = findViewById(R.id.btn_notification_permission);
         mBatteryButton = findViewById(R.id.btn_battery_permission);
+        mBackgroundSettingsButton = findViewById(R.id.btn_background_settings);
         mContinueButton = findViewById(R.id.btn_continue);
         mCheckUpdateButton = findViewById(R.id.btn_check_update);
         mNotificationStatus = findViewById(R.id.notification_status);
         mBatteryStatus = findViewById(R.id.battery_status);
+        mBackgroundHintText = findViewById(R.id.background_hint_text);
 
         // Upgrade migration: clean deprecated keys from existing OpenClaw config.
         BotDropConfig.sanitizeLegacyConfig();
@@ -79,6 +84,7 @@ public class BotDropLauncherActivity extends Activity {
 
         mNotificationButton.setOnClickListener(v -> openNotificationSettings());
         mBatteryButton.setOnClickListener(v -> requestBatteryOptimization());
+        mBackgroundSettingsButton.setOnClickListener(v -> openAdvancedBackgroundSettings());
         mCheckUpdateButton.setOnClickListener(v -> checkUpdateManually());
         mContinueButton.setOnClickListener(v -> {
             mPermissionsPhaseComplete = true;
@@ -144,6 +150,17 @@ public class BotDropLauncherActivity extends Activity {
         return true; // Pre-Android M: no battery optimization
     }
 
+    private int getRestrictBackgroundStatus() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED;
+            return cm.getRestrictBackgroundStatus();
+        } catch (Exception ignored) {
+            return ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED;
+        }
+    }
+
     // --- Permission requests ---
 
     /**
@@ -182,6 +199,49 @@ public class BotDropLauncherActivity extends Activity {
         }
     }
 
+    /**
+     * Open OEM/system pages that commonly control background throttling.
+     * This cannot be fully automated across all OEMs, but we can take the user to the right place quickly.
+     */
+    private void openAdvancedBackgroundSettings() {
+        // 1) If background data is restricted, take user straight to the Data Saver allowlist screen.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            int status = getRestrictBackgroundStatus();
+            if (status == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_IGNORE_BACKGROUND_DATA_RESTRICTIONS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                    return;
+                } catch (Exception ignored) {
+                    // fall through
+                }
+                try {
+                    // ACTION_DATA_SAVER_SETTINGS is not present on some compile SDKs; use literal.
+                    startActivity(new Intent("android.settings.DATA_SAVER_SETTINGS"));
+                    return;
+                } catch (Exception ignored) {
+                    // fall through
+                }
+            }
+        }
+
+        // 2) Otherwise, open app details where most ROMs surface Battery: Unrestricted.
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+            return;
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to open app details settings: " + e.getMessage());
+        }
+
+        // 3) Last resort: general settings.
+        try {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        } catch (Exception ignored) {}
+    }
+
     // --- Permission results ---
 
     @Override
@@ -210,6 +270,7 @@ public class BotDropLauncherActivity extends Activity {
     private void updatePermissionStatus() {
         boolean notifGranted = areNotificationsEnabled();
         boolean batteryExempt = isBatteryOptimizationExempt();
+        int backgroundStatus = getRestrictBackgroundStatus();
 
         // Notification status
         if (notifGranted) {
@@ -233,6 +294,17 @@ public class BotDropLauncherActivity extends Activity {
             mBatteryStatus.setVisibility(View.GONE);
             mBatteryButton.setEnabled(true);
             mBatteryButton.setText("Allow");
+        }
+
+        // Background hint status (informational)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (backgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED) {
+                mBackgroundHintText.setText("Background data is restricted. Enable Unrestricted data usage for BotDrop.");
+            } else if (backgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_WHITELISTED) {
+                mBackgroundHintText.setText("Background data is allowed. If it still pauses, set Battery to Unrestricted.");
+            } else {
+                mBackgroundHintText.setText("If the bot pauses in background, set Battery to Unrestricted and allow Background data.");
+            }
         }
 
         // Enable continue when both handled

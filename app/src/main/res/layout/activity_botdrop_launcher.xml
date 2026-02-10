@@ -102,7 +102,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="32dp">
+                android:layout_marginBottom="12dp">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -144,6 +144,50 @@
                     android:minWidth="80dp"
                     android:background="@drawable/botdrop_button_bg"
                     android:textColor="#1A1A1A"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Advanced background settings (OEMs may still throttle) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="32dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginEnd="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Battery (Unrestricted)"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/botdrop_on_background" />
+
+                    <TextView
+                        android:id="@+id/background_hint_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="If the bot pauses in background, set Battery to Unrestricted and allow Background data."
+                        android:textSize="13sp"
+                        android:textColor="@color/botdrop_secondary_text" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_background_settings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Open"
+                    android:textSize="13sp"
+                    android:minWidth="80dp"
+                    android:background="@drawable/botdrop_button_outline_bg"
+                    android:textColor="@color/botdrop_accent"
                     android:textStyle="bold" />
             </LinearLayout>
 
