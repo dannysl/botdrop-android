@@ -14,12 +14,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.text.InputType;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -31,12 +28,16 @@ import com.termux.app.TermuxActivity;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Dashboard activity - main screen after setup is complete.
@@ -49,6 +50,9 @@ public class DashboardActivity extends Activity {
     public static final String NOTIFICATION_CHANNEL_ID = "botdrop_gateway";
     private static final int STATUS_REFRESH_INTERVAL_MS = 5000; // 5 seconds
     private static final int ERROR_CHECK_INTERVAL_MS = 15000; // 15 seconds
+    private static final String MODEL_LIST_COMMAND = "openclaw models list --all --plain";
+    private static final String MODEL_PREFS_NAME = "openclaw_model_cache_v1";
+    private static final String MODEL_CACHE_KEY_PREFIX = "models_by_version_";
 
     private TextView mStatusText;
     private TextView mUptimeText;
@@ -77,6 +81,10 @@ public class DashboardActivity extends Activity {
     private Runnable mStatusRefreshRunnable;
     private long mLastErrorCheckAtMs = 0L;
     private String mLastErrorMessage;
+
+    private interface ModelListPrefetchCallback {
+        void onFinished(boolean success);
+    }
 
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
@@ -542,61 +550,12 @@ public class DashboardActivity extends Activity {
         }
 
         ModelSelectorDialog dialog = new ModelSelectorDialog(this, mBotDropService, true);
-        dialog.show((provider, model) -> {
+        dialog.show((provider, model, apiKey) -> {
             if (provider != null && model != null) {
-                showModelAuthDialog(provider, model);
+                String fullModel = provider + "/" + model;
+                updateModel(fullModel, apiKey);
             }
         });
-    }
-
-    /**
-     * Ask for optional API key update, then apply model.
-     */
-    private void showModelAuthDialog(String provider, String model) {
-        String fullModel = provider + "/" + model;
-        boolean hasExistingKey = BotDropConfig.hasApiKey(provider);
-
-        int horizontalPadding = (int) (20 * getResources().getDisplayMetrics().density);
-        int verticalPadding = (int) (12 * getResources().getDisplayMetrics().density);
-
-        LinearLayout container = new LinearLayout(this);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(horizontalPadding, verticalPadding, horizontalPadding, 0);
-
-        TextView message = new TextView(this);
-        message.setText(
-            "Selected model: " + fullModel + "\n" +
-            (hasExistingKey
-                ? "Enter a new API key if you want to replace the current one."
-                : "No API key found for provider \"" + provider + "\". Please enter one.")
-        );
-        message.setPadding(0, 0, 0, verticalPadding);
-        container.addView(message);
-
-        EditText apiKeyInput = new EditText(this);
-        apiKeyInput.setHint(hasExistingKey ? "Leave empty to keep current key" : "Enter API key");
-        apiKeyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        container.addView(apiKeyInput);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Change model")
-            .setView(container)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Save & Apply", null)
-            .create();
-
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String newApiKey = apiKeyInput.getText().toString().trim();
-            if (!hasExistingKey && TextUtils.isEmpty(newApiKey)) {
-                apiKeyInput.setError("API key is required for this provider");
-                return;
-            }
-
-            dialog.dismiss();
-            updateModel(fullModel, newApiKey);
-        }));
-
-        dialog.show();
     }
 
     /**
@@ -796,6 +755,7 @@ public class DashboardActivity extends Activity {
             dialogView.findViewById(R.id.update_step_1_icon),
             dialogView.findViewById(R.id.update_step_2_icon),
             dialogView.findViewById(R.id.update_step_3_icon),
+            dialogView.findViewById(R.id.update_step_4_icon),
         };
         TextView statusMessage = dialogView.findViewById(R.id.update_status_message);
 
@@ -817,6 +777,7 @@ public class DashboardActivity extends Activity {
             "Installing update...",
             "Finalizing...",
             "Starting gateway...",
+            "Refreshing model list...",
         };
 
         mBotDropService.updateOpenclaw(targetVersion,
@@ -865,25 +826,141 @@ public class DashboardActivity extends Activity {
             @Override
             public void onComplete(String newVersion) {
                 mOpenclawLatestUpdateVersion = null;
-                // Mark all steps complete
-                for (TextView icon : stepIcons) {
-                    icon.setText("\u2713");
-                }
-                statusMessage.setText("Updated to v" + newVersion);
+                advanceTo(stepMessages[4]);
+                statusMessage.setText("Updated to v" + newVersion + " and refreshing model list...");
+                prefetchModelsForUpdate(newVersion, success -> {
+                    // Mark all steps complete
+                    for (TextView icon : stepIcons) {
+                        icon.setText("\u2713");
+                    }
+                    statusMessage.setText(
+                        success
+                            ? "Updated to v" + newVersion
+                            : "Updated to v" + newVersion + " (model cache refresh failed)"
+                    );
 
-                // Auto-dismiss after 1.5s
-                mHandler.postDelayed(() -> {
-                    if (!isFinishing()) {
-                        progressDialog.dismiss();
-                    }
-                    OpenClawUpdateChecker.clearUpdate(DashboardActivity.this);
-                    if (mOpenclawVersionText != null) {
-                        mOpenclawVersionText.setText("OpenClaw v" + newVersion);
-                    }
-                    refreshStatus();
-                }, 1500);
+                    // Auto-dismiss after 1.5s
+                    mHandler.postDelayed(() -> {
+                        if (!isFinishing()) {
+                            progressDialog.dismiss();
+                        }
+                        OpenClawUpdateChecker.clearUpdate(DashboardActivity.this);
+                        if (mOpenclawVersionText != null) {
+                            mOpenclawVersionText.setText("OpenClaw v" + newVersion);
+                        }
+                        refreshStatus();
+                    }, 1500);
+                });
             }
         });
+    }
+
+    private void prefetchModelsForUpdate(String openclawVersion, ModelListPrefetchCallback callback) {
+        final ModelListPrefetchCallback finalCallback = callback == null ? (ModelListPrefetchCallback) success -> {} : callback;
+
+        if (mBotDropService == null) {
+            finalCallback.onFinished(false);
+            return;
+        }
+
+        final String normalizedVersion = normalizeModelCacheKey(openclawVersion);
+        mBotDropService.executeCommand(MODEL_LIST_COMMAND, result -> {
+            if (!result.success) {
+                Logger.logWarn(LOG_TAG, "Model list prefetch failed for v" + openclawVersion + ": exit " + result.exitCode);
+                finalCallback.onFinished(false);
+                return;
+            }
+
+            List<ModelInfo> models = parseModelListForUpdate(result.stdout);
+            if (models.isEmpty()) {
+                Logger.logWarn(LOG_TAG, "Model list prefetch returned empty output for v" + openclawVersion);
+                finalCallback.onFinished(false);
+                return;
+            }
+
+            Collections.sort(models, (a, b) -> {
+                if (a == null || b == null || a.fullName == null || b.fullName == null) return 0;
+                return b.fullName.compareToIgnoreCase(a.fullName);
+            });
+
+            cacheModelsForUpdate(normalizedVersion, models);
+            finalCallback.onFinished(true);
+            Logger.logInfo(LOG_TAG, "Prefetched " + models.size() + " models for OpenClaw v" + openclawVersion);
+        });
+    }
+
+    private List<ModelInfo> parseModelListForUpdate(String output) {
+        List<ModelInfo> models = new ArrayList<>();
+        if (TextUtils.isEmpty(output)) {
+            return models;
+        }
+
+        try {
+            String[] lines = output.split("\\r?\\n");
+            for (String line : lines) {
+                String trimmed = line == null ? "" : line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.startsWith("#") || trimmed.startsWith("Model ")) {
+                    continue;
+                }
+
+                String token = trimmed;
+                if (trimmed.contains(" ")) {
+                    token = trimmed.split("\\s+")[0];
+                }
+
+                if (isModelTokenForUpdate(token)) {
+                    models.add(new ModelInfo(token));
+                }
+            }
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to parse model list output: " + e.getMessage());
+        }
+        return models;
+    }
+
+    private void cacheModelsForUpdate(String version, List<ModelInfo> models) {
+        if (TextUtils.isEmpty(version) || models == null || models.isEmpty()) return;
+
+        try {
+            JSONArray list = new JSONArray();
+            for (ModelInfo model : models) {
+                if (model != null && !TextUtils.isEmpty(model.fullName)) {
+                    list.put(model.fullName);
+                }
+            }
+
+            JSONObject root = new JSONObject();
+            root.put("version", version);
+            root.put("updated_at", System.currentTimeMillis());
+            root.put("models", list);
+
+            getSharedPreferences(MODEL_PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(modelCacheKey(version), root.toString())
+                .apply();
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to cache prefetched model list: " + e.getMessage());
+        }
+    }
+
+    private String modelCacheKey(String version) {
+        return MODEL_CACHE_KEY_PREFIX + normalizeModelCacheKey(version);
+    }
+
+    private String normalizeModelCacheKey(String version) {
+        if (TextUtils.isEmpty(version)) {
+            return "unknown";
+        }
+        return version.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private boolean isModelTokenForUpdate(String token) {
+        if (token == null || token.isEmpty()) return false;
+        if (!token.contains("/")) return false;
+        return token.matches("[A-Za-z0-9._-]+/[A-Za-z0-9._:/-]+");
     }
 
     private void checkGatewayErrors(boolean isRunning) {

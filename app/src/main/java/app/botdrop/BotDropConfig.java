@@ -276,6 +276,56 @@ public class BotDropConfig {
         }
     }
 
+    /**
+     * Read the latest API key for a provider.
+     * Priority:
+     * 1) provider:default
+     * 2) first matching provider entry
+     */
+    public static String getApiKey(String provider) {
+        synchronized (CONFIG_LOCK) {
+            try {
+                File authFile = new File(AUTH_PROFILES_FILE);
+                if (!authFile.exists()) return "";
+
+                JSONObject authProfiles;
+                try (FileReader reader = new FileReader(authFile)) {
+                    StringBuilder sb = new StringBuilder();
+                    char[] buffer = new char[1024];
+                    int read;
+                    while ((read = reader.read(buffer)) != -1) {
+                        sb.append(buffer, 0, read);
+                    }
+                    authProfiles = new JSONObject(sb.toString());
+                }
+
+                JSONObject profiles = authProfiles.optJSONObject("profiles");
+                if (profiles == null) return "";
+
+                JSONObject defaultProfile = profiles.optJSONObject(provider + ":default");
+                if (defaultProfile != null) {
+                    String key = defaultProfile.optString("key", "").trim();
+                    if (!key.isEmpty()) return key;
+                }
+
+                java.util.Iterator<String> keys = profiles.keys();
+                while (keys.hasNext()) {
+                    String id = keys.next();
+                    JSONObject p = profiles.optJSONObject(id);
+                    if (p == null) continue;
+                    if (!provider.equals(p.optString("provider", ""))) continue;
+                    String key = p.optString("key", "").trim();
+                    if (!key.isEmpty()) return key;
+                }
+
+                return "";
+            } catch (Exception e) {
+                Logger.logError(LOG_TAG, "Failed to read api key from auth profile: " + e.getMessage());
+                return "";
+            }
+        }
+    }
+
     private static String normalizeModel(String provider, String model) {
         if (model == null) return "default";
         String normalized = model.trim();

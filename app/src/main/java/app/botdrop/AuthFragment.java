@@ -147,8 +147,8 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
 
     private void openModelSelector() {
         // Model dialog now reads static asset; service can be null.
-        ModelSelectorDialog dialog = new ModelSelectorDialog(requireContext(), mService, true);
-        dialog.show((provider, model) -> {
+        ModelSelectorDialog dialog = new ModelSelectorDialog(requireContext(), mService, false);
+        dialog.show((provider, model, apiKey) -> {
             if (provider == null || model == null) {
                 Logger.logInfo(LOG_TAG, "Model selection cancelled");
                 return;
@@ -242,6 +242,10 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
         boolean providerWritten = BotDropConfig.setProvider(providerId, modelToUse);
 
         if (keyWritten && providerWritten) {
+            if (getContext() != null) {
+                ModelSelectorDialog.cacheProviderApiKey(requireContext(), providerId, credential);
+            }
+
             showStatus("✓ Connected!\nModel: " + fullModel, true);
 
             ConfigTemplate template = new ConfigTemplate();

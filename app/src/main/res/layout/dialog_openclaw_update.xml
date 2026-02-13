@@ -113,6 +113,33 @@
             android:textColor="@color/botdrop_on_background" />
     </LinearLayout>
 
+    <!-- Step 4: Refresh model list cache -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp">
+
+        <TextView
+            android:id="@+id/update_step_4_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:text="○"
+            android:textSize="18sp"
+            android:textColor="@color/botdrop_accent"
+            android:gravity="center"
+            android:layout_marginEnd="12dp" />
+
+        <TextView
+            android:id="@+id/update_step_4_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Refreshing model list"
+            android:textSize="14sp"
+            android:textColor="@color/botdrop_on_background" />
+    </LinearLayout>
+
     <!-- Status message -->
     <TextView
         android:id="@+id/update_status_message"
