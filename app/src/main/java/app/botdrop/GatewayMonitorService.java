@@ -2,18 +2,22 @@ package app.botdrop;
 
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.NotificationChannel;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -35,11 +39,18 @@ public class GatewayMonitorService extends Service {
 
     private static final String LOG_TAG = "GatewayMonitorService";
     private static final int NOTIFICATION_ID = 1001;
+    private static final int APP_UPDATE_NOTIFICATION_ID = 1002;
     private static final int MONITOR_INTERVAL_MS = 30000; // 30 seconds
     private static final int RESTART_DELAY_MS = 5000; // 5 seconds
     private static final int MAX_RESTART_ATTEMPTS = 5;
     private static final long WAKELOCK_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
     private static final long WAKELOCK_REACQUIRE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+    private static final long APP_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L; // 6 hours
+    private static final String APP_UPDATE_PREFS_NAME = "botdrop_update";
+    private static final String KEY_BG_LAST_APP_UPDATE_CHECK = "bg_last_app_update_check_time";
+    private static final String KEY_BG_LAST_APP_UPDATE_NOTIFIED = "bg_last_app_update_notified_version";
+    private static final String KEY_DISMISSED_VERSION = "dismissed_version";
+    private static final String UPDATE_NOTIFICATION_CHANNEL_ID = "botdrop_updates";
 
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private Runnable mMonitorRunnable;
@@ -112,6 +123,7 @@ public class GatewayMonitorService extends Service {
         Intent intent = new Intent(this, BotDropService.class);
         startService(intent);
         bindService(intent, mBotDropServiceConnection, Context.BIND_AUTO_CREATE);
+        createNotificationChannels();
 
         // Initialize wake lock to handle Doze mode
         // Uses timeout with periodic re-acquisition to prevent orphaned locks
@@ -210,17 +222,18 @@ public class GatewayMonitorService extends Service {
 
         mMonitorRunnable = new Runnable() {
             @Override
-            public void run() {
-                // Re-acquire WakeLock periodically to prevent timeout
-                reacquireWakeLockIfNeeded();
+                public void run() {
+                    // Re-acquire WakeLock periodically to prevent timeout
+                    reacquireWakeLockIfNeeded();
 
-                // Check gateway status
-                checkAndRestartGateway();
+                    // Check gateway status
+                    checkAndRestartGateway();
+                    maybeCheckForAppUpdate();
 
-                if (mIsMonitoring) {
-                    mHandler.postDelayed(this, MONITOR_INTERVAL_MS);
+                    if (mIsMonitoring) {
+                        mHandler.postDelayed(this, MONITOR_INTERVAL_MS);
+                    }
                 }
-            }
         };
 
         // Start immediately, then repeat at intervals
@@ -235,6 +248,86 @@ public class GatewayMonitorService extends Service {
         if (mMonitorRunnable != null) {
             mHandler.removeCallbacks(mMonitorRunnable);
         }
+    }
+
+    private void maybeCheckForAppUpdate() {
+        SharedPreferences prefs = getSharedPreferences(APP_UPDATE_PREFS_NAME, MODE_PRIVATE);
+        long lastCheck = prefs.getLong(KEY_BG_LAST_APP_UPDATE_CHECK, 0);
+        long now = System.currentTimeMillis();
+        if (now - lastCheck < APP_UPDATE_CHECK_INTERVAL_MS) {
+            return;
+        }
+        prefs.edit().putLong(KEY_BG_LAST_APP_UPDATE_CHECK, now).apply();
+
+        UpdateChecker.forceCheckWithFeedback(this, (updateAvailable, latestVersion, downloadUrl, notes, message) -> {
+            if (!updateAvailable || TextUtils.isEmpty(latestVersion)) {
+                return;
+            }
+
+            String dismissedVersion = prefs.getString(KEY_DISMISSED_VERSION, null);
+            if (latestVersion.equals(dismissedVersion)) {
+                Logger.logInfo(LOG_TAG, "Update " + latestVersion + " was dismissed, skip notification");
+                return;
+            }
+
+            String notifiedVersion = prefs.getString(KEY_BG_LAST_APP_UPDATE_NOTIFIED, null);
+            if (latestVersion.equals(notifiedVersion)) {
+                Logger.logInfo(LOG_TAG, "Update " + latestVersion + " already notified");
+                return;
+            }
+
+            postAppUpdateNotification(latestVersion, downloadUrl);
+            prefs.edit().putString(KEY_BG_LAST_APP_UPDATE_NOTIFIED, latestVersion).apply();
+        });
+    }
+
+    private void postAppUpdateNotification(String latestVersion, String downloadUrl) {
+        Intent openIntent;
+        if (!TextUtils.isEmpty(downloadUrl)) {
+            openIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl));
+        } else {
+            openIntent = new Intent(this, DashboardActivity.class);
+            openIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        }
+
+        int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            pendingIntentFlags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent openPendingIntent = PendingIntent.getActivity(this, 101, openIntent, pendingIntentFlags);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, UPDATE_NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("BotDrop 更新")
+            .setContentText("检测到新版本：v" + latestVersion)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText("检测到新版本：v" + latestVersion + "\n\n点击查看详情"))
+            .setSmallIcon(R.drawable.ic_service_notification)
+            .setContentIntent(openPendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(APP_UPDATE_NOTIFICATION_ID, builder.build());
+        }
+    }
+
+    private void createNotificationChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) {
+            return;
+        }
+
+        NotificationChannel updateChannel = new NotificationChannel(
+            UPDATE_NOTIFICATION_CHANNEL_ID,
+            "BotDrop Updates",
+            NotificationManager.IMPORTANCE_DEFAULT
+        );
+        updateChannel.setDescription("Notifies when a new BotDrop version is available.");
+        manager.createNotificationChannel(updateChannel);
     }
 
     /**

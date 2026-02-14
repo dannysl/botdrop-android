@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 
 import com.termux.shared.logger.Logger;
 
@@ -25,7 +26,7 @@ public class UpdateChecker {
 
     private static final String LOG_TAG = "UpdateChecker";
     private static final String CHECK_URL = "https://api.botdrop.app/version";
-    private static final long CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+    private static final long CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L; // 6 hours
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_MS = 10000;
     private static final String PREFS_NAME = "botdrop_update";
@@ -34,9 +35,13 @@ public class UpdateChecker {
     private static final String KEY_LATEST_VERSION = "latest_version";
     private static final String KEY_DOWNLOAD_URL = "download_url";
     private static final String KEY_RELEASE_NOTES = "release_notes";
+    private static final String KEY_CHECKED_VERSION = "checked_version";
 
     interface UpdateCallback {
         void onUpdateAvailable(String latestVersion, String downloadUrl, String notes);
+
+        default void onNoUpdate() {
+        }
     }
 
     public interface ForceCheckCallback {
@@ -48,17 +53,6 @@ public class UpdateChecker {
      */
     static void check(Context ctx, UpdateCallback cb) {
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-
-        // Throttle: skip if checked within the last 24 hours
-        long lastCheck = prefs.getLong(KEY_LAST_CHECK, 0);
-        long elapsed = System.currentTimeMillis() - lastCheck;
-        if (elapsed < CHECK_INTERVAL_MS) {
-            Logger.logInfo(LOG_TAG, "Skipping check, last check was " + (elapsed / 1000) + "s ago");
-            // Still notify from stored result if available
-            if (cb != null) notifyFromStored(ctx, prefs, cb);
-            return;
-        }
-
         String currentVersion;
         int currentVersionCode;
         try {
@@ -67,6 +61,19 @@ public class UpdateChecker {
             currentVersionCode = pi.versionCode;
         } catch (Exception e) {
             Logger.logError(LOG_TAG, "Failed to get package info: " + e.getMessage());
+            return;
+        }
+
+        // Throttle: skip if checked within the last 24 hours
+        String lastCheckedVersion = prefs.getString(KEY_CHECKED_VERSION, null);
+        long lastCheck = prefs.getLong(KEY_LAST_CHECK, 0);
+        long elapsed = System.currentTimeMillis() - lastCheck;
+        if (!TextUtils.equals(currentVersion, lastCheckedVersion) || lastCheckedVersion == null) {
+            Logger.logInfo(LOG_TAG, "App version changed, bypassing check throttle");
+        } else if (elapsed < CHECK_INTERVAL_MS) {
+            Logger.logInfo(LOG_TAG, "Skipping check, last check was " + (elapsed / 1000) + "s ago");
+            // Still notify from stored result if available
+            if (cb != null) notifyFromStored(ctx, prefs, cb);
             return;
         }
 
@@ -98,7 +105,10 @@ public class UpdateChecker {
                 conn.disconnect();
 
                 // Record successful check
-                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply();
+                prefs.edit()
+                    .putLong(KEY_LAST_CHECK, System.currentTimeMillis())
+                    .putString(KEY_CHECKED_VERSION, currentVersion)
+                    .apply();
 
                 JSONObject json = new JSONObject(sb.toString());
                 String latestVersion = json.optString("latest_version", "");
@@ -110,12 +120,18 @@ public class UpdateChecker {
                 if (latestVersion.isEmpty() || latestVersion.equals(currentVersion)) {
                     Logger.logInfo(LOG_TAG, "No update available");
                     clearStored(prefs);
+                    if (cb != null) {
+                        notifyNoUpdate(cb);
+                    }
                     return;
                 }
 
                 String dismissedVersion = prefs.getString(KEY_DISMISSED_VERSION, null);
                 if (latestVersion.equals(dismissedVersion)) {
                     Logger.logInfo(LOG_TAG, "Version " + latestVersion + " was dismissed");
+                    if (cb != null) {
+                        notifyNoUpdate(cb);
+                    }
                     return;
                 }
 
@@ -133,6 +149,9 @@ public class UpdateChecker {
                 } else {
                     Logger.logInfo(LOG_TAG, "Latest " + latestVersion + " is not newer than " + currentVersion);
                     clearStored(prefs);
+                    if (cb != null) {
+                        notifyNoUpdate(cb);
+                    }
                 }
             } catch (Exception e) {
                 Logger.logError(LOG_TAG, "Update check failed: " + e.getMessage());
@@ -199,7 +218,10 @@ public class UpdateChecker {
                 reader.close();
                 conn.disconnect();
 
-                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply();
+                prefs.edit()
+                    .putLong(KEY_LAST_CHECK, System.currentTimeMillis())
+                    .putString(KEY_CHECKED_VERSION, currentVersion)
+                    .apply();
 
                 JSONObject json = new JSONObject(sb.toString());
                 String latestVersion = json.optString("latest_version", "");
@@ -279,7 +301,14 @@ public class UpdateChecker {
         String[] update = getAvailableUpdate(ctx);
         if (update != null) {
             new Handler(Looper.getMainLooper()).post(() -> cb.onUpdateAvailable(update[0], update[1], update[2]));
+            return;
         }
+        notifyNoUpdate(cb);
+    }
+
+    private static void notifyNoUpdate(UpdateCallback cb) {
+        if (cb == null) return;
+        new Handler(Looper.getMainLooper()).post(cb::onNoUpdate);
     }
 
     private static void clearStored(SharedPreferences prefs) {
@@ -307,11 +336,33 @@ public class UpdateChecker {
     }
 
     private static int[] parseSemver(String v) {
-        String[] parts = v.split("\\.");
+        if (v == null) {
+            throw new IllegalArgumentException("version is null");
+        }
+
+        String trimmed = v.trim();
+        if (trimmed.startsWith("v")) {
+            trimmed = trimmed.substring(1);
+        }
+
+        int suffixIndex = trimmed.indexOf('-');
+        int buildMetadataIndex = trimmed.indexOf('+');
+        int trimIndex = suffixIndex;
+        if (buildMetadataIndex >= 0 && (trimIndex < 0 || buildMetadataIndex < trimIndex)) {
+            trimIndex = buildMetadataIndex;
+        }
+        if (trimIndex >= 0) {
+            trimmed = trimmed.substring(0, trimIndex);
+        }
+
+        String[] parts = trimmed.split("\\.");
+        int major = parts.length > 0 ? Integer.parseInt(parts[0]) : 0;
+        int minor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        int patch = parts.length > 2 ? Integer.parseInt(parts[2]) : 0;
         return new int[]{
-            Integer.parseInt(parts[0]),
-            Integer.parseInt(parts[1]),
-            Integer.parseInt(parts[2])
+            major,
+            minor,
+            patch
         };
     }
 }

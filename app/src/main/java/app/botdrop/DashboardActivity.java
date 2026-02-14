@@ -288,7 +288,17 @@ public class DashboardActivity extends Activity {
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
         // Check for app updates (also picks up results from launcher check)
-        UpdateChecker.check(this, (latestVersion, downloadUrl, notes) -> showUpdateBanner(latestVersion, downloadUrl));
+        UpdateChecker.check(this, new UpdateChecker.UpdateCallback() {
+            @Override
+            public void onUpdateAvailable(String latestVersion, String downloadUrl, String notes) {
+                showUpdateBanner(latestVersion, downloadUrl);
+            }
+
+            @Override
+            public void onNoUpdate() {
+                hideUpdateBanner();
+            }
+        });
 
         // Also check stored result in case launcher already fetched it
         String[] stored = UpdateChecker.getAvailableUpdate(this);
@@ -1243,6 +1253,12 @@ public class DashboardActivity extends Activity {
             mUpdateBanner.setVisibility(View.GONE);
             UpdateChecker.dismiss(this, latestVersion);
         });
+    }
+
+    private void hideUpdateBanner() {
+        if (mUpdateBanner != null) {
+            mUpdateBanner.setVisibility(View.GONE);
+        }
     }
 
     /**

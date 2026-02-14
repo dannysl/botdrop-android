@@ -6,9 +6,27 @@ export default {
       return handleVersion(request, env, url);
     }
 
+    if (url.pathname === '/purge') {
+      return handlePurge(request, env, url);
+    }
+
     return new Response('Not found', { status: 404 });
   },
 };
+
+async function handlePurge(request, env, url) {
+  const secret = url.searchParams.get('key');
+  if (!secret || secret !== env.PURGE_KEY) {
+    return jsonResponse({ error: 'unauthorized' }, 401);
+  }
+
+  if (!env.CACHE) {
+    return jsonResponse({ error: 'no_cache' }, 500);
+  }
+
+  await env.CACHE.delete('latest_release');
+  return jsonResponse({ ok: true, message: 'cache purged' });
+}
 
 async function handleVersion(request, env, url) {
   const clientVersion = url.searchParams.get('v') || 'unknown';
@@ -30,7 +48,10 @@ async function handleVersion(request, env, url) {
       const repo = env.GITHUB_REPO || 'zhixianio/botdrop-android';
       const res = await fetch(
         `https://api.github.com/repos/${repo}/releases/latest`,
-        { headers: { 'User-Agent': 'botdrop-api-worker', Accept: 'application/vnd.github.v3+json' } },
+        {
+          headers: { 'User-Agent': 'botdrop-api-worker', Accept: 'application/vnd.github.v3+json' },
+          cf: { cacheTtl: 0, cacheEverything: false },
+        },
       );
 
       if (!res.ok) {
