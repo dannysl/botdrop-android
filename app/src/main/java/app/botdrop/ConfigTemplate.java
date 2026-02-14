@@ -10,6 +10,7 @@ public class ConfigTemplate {
     public String model;         // e.g., "gemini-3-flash-preview"
     public String apiKey;        // e.g., "AIzaSy..."
     public String baseUrl;       // optional custom provider base URL
+    public java.util.List<String> customModels;
     public String tgBotToken;    // e.g., "7123456:AAF..." (optional)
     public String tgUserId;      // e.g., "987654321" (optional)
 
@@ -40,6 +41,7 @@ public class ConfigTemplate {
             ", model='" + model + '\'' +
             ", apiKey='***'" + // Don't log full key
             ", baseUrl='" + (baseUrl != null ? "set" : "null") + '\'' +
+            ", customModels=" + (customModels == null ? 0 : customModels.size()) +
             ", tgBotToken=" + (tgBotToken != null ? "***" : "null") +
             ", tgUserId='" + tgUserId + '\'' +
             '}';

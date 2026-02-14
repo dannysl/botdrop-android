@@ -11,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Environment;
 import android.os.Build;
 import android.net.Uri;
 import android.os.Bundle;
@@ -25,26 +26,36 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URL;
 import java.net.NetworkInterface;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,8 +85,17 @@ public class DashboardActivity extends Activity {
     private static final String OPENCLAW_WEB_UI_BUTTON_TEXT_DEFAULT = "Open Web UI";
     private static final String OPENCLAW_WEB_UI_BUTTON_TEXT_PENDING = "Opening Web UI";
     private static final String OPENCLAW_CONFIG_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/openclaw.json";
+    private static final String OPENCLAW_AUTH_PROFILES_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/agents/main/agent/auth-profiles.json";
     private static final String GATEWAY_LOG_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/gateway.log";
     private static final String GATEWAY_DEBUG_LOG_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/gateway-debug.log";
+    private static final String OPENCLAW_BACKUP_DIRECTORY = "BotDrop/openclaw";
+    private static final String OPENCLAW_BACKUP_FILE_PREFIX = "openclaw-config-backup-";
+    private static final String OPENCLAW_BACKUP_FILE_EXTENSION = ".json";
+    private static final String OPENCLAW_BACKUP_DATE_PATTERN = "yyyyMMdd_HHmmss";
+    private static final String OPENCLAW_BACKUP_META_OPENCLAW_CONFIG_KEY = "openclawConfig";
+    private static final String OPENCLAW_BACKUP_META_AUTH_PROFILES_KEY = "authProfiles";
+    private static final String OPENCLAW_BACKUP_META_CREATED_AT_KEY = "createdAt";
+    private static final int OPENCLAW_STORAGE_PERMISSION_REQUEST_CODE = 3001;
     private static final Pattern WEB_UI_URL_PATTERN =
             Pattern.compile("(?i)https?://[^\\s\"'`<>\\)\\]}]+");
     private static final Pattern HOST_PORT_PATTERN =
@@ -116,6 +136,8 @@ public class DashboardActivity extends Activity {
     private TextView mOpenclawCheckUpdateButton;
     private TextView mOpenclawLogButton;
     private TextView mOpenclawWebUiButton;
+    private TextView mOpenclawBackupButton;
+    private TextView mOpenclawRestoreButton;
     private ImageButton mBackToAgentSelectionButton;
     private String mOpenclawLatestUpdateVersion;
     private AlertDialog mOpenclawUpdateDialog;
@@ -129,6 +151,7 @@ public class DashboardActivity extends Activity {
     private Runnable mStatusRefreshRunnable;
     private long mLastErrorCheckAtMs = 0L;
     private String mLastErrorMessage;
+    private Runnable mPendingOpenclawStorageAction;
 
     private interface ModelListPrefetchCallback {
         void onFinished(boolean success);
@@ -223,6 +246,14 @@ public class DashboardActivity extends Activity {
         if (mOpenclawWebUiButton != null) {
             mOpenclawWebUiButton.setOnClickListener(v -> openOpenclawWebUi());
         }
+        mOpenclawBackupButton = findViewById(R.id.btn_backup_openclaw_config);
+        if (mOpenclawBackupButton != null) {
+            mOpenclawBackupButton.setOnClickListener(v -> backupOpenclawConfigToSdcard());
+        }
+        mOpenclawRestoreButton = findViewById(R.id.btn_restore_openclaw_config);
+        if (mOpenclawRestoreButton != null) {
+            mOpenclawRestoreButton.setOnClickListener(v -> restoreOpenclawConfigFromSdcard());
+        }
         if (mTelegramChannelRow != null) {
             mTelegramChannelRow.setOnClickListener(v -> openTelegramChannelConfig());
         }
@@ -292,6 +323,22 @@ public class DashboardActivity extends Activity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == OPENCLAW_STORAGE_PERMISSION_REQUEST_CODE) {
+            retryPendingOpenclawStorageActionIfPermitted();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == OPENCLAW_STORAGE_PERMISSION_REQUEST_CODE) {
+            retryPendingOpenclawStorageActionIfPermitted();
+        }
+    }
+
     private void stopStatusRefresh() {
         if (mStatusRefreshRunnable != null) {
             mHandler.removeCallbacks(mStatusRefreshRunnable);
@@ -312,6 +359,259 @@ public class DashboardActivity extends Activity {
         } else {
             mOpenclawWebUiButton.setText(statusText);
         }
+    }
+
+    private void backupOpenclawConfigToSdcard() {
+        runWithOpenclawStoragePermission(() -> {
+            setButtonEnabled(mOpenclawBackupButton, false);
+            new Thread(() -> {
+                String backupPath = createOpenclawBackupFile();
+                runOnUiThread(() -> {
+                    setButtonEnabled(mOpenclawBackupButton, true);
+                    if (TextUtils.isEmpty(backupPath)) {
+                        Toast.makeText(this, "No OpenClaw config available to backup", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Toast.makeText(
+                        this,
+                        "OpenClaw config backed up successfully:\n"
+                            + backupPath
+                            + "\nIncludes openclaw.json and auth-profiles.json (including Telegram botToken).",
+                        Toast.LENGTH_LONG
+                    ).show();
+                });
+            }).start();
+        });
+    }
+
+    private void restoreOpenclawConfigFromSdcard() {
+        runWithOpenclawStoragePermission(() -> {
+            File backupFile = getLatestOpenclawBackupFile();
+            if (backupFile == null) {
+                Toast.makeText(
+                    this,
+                    "No backup file found in: " + getOpenclawBackupDirectory().getAbsolutePath(),
+                    Toast.LENGTH_SHORT
+                ).show();
+                return;
+            }
+
+            confirmOpenclawRestore(backupFile);
+        });
+    }
+
+    private void runWithOpenclawStoragePermission(@NonNull Runnable action) {
+        File backupDir = getOpenclawBackupDirectory();
+        if (PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermissionIfPathOnPrimaryExternalStorage(
+            this,
+            backupDir.getAbsolutePath(),
+            OPENCLAW_STORAGE_PERMISSION_REQUEST_CODE,
+            true
+        )) {
+            action.run();
+            return;
+        }
+        mPendingOpenclawStorageAction = action;
+    }
+
+    private void retryPendingOpenclawStorageActionIfPermitted() {
+        Runnable action = mPendingOpenclawStorageAction;
+        if (action == null) {
+            return;
+        }
+        mPendingOpenclawStorageAction = null;
+        if (!PermissionUtils.checkStoragePermission(this, PermissionUtils.isLegacyExternalStoragePossible(this))) {
+            Toast.makeText(
+                this,
+                "Storage permission is required to restore or backup OpenClaw config",
+                Toast.LENGTH_SHORT
+            ).show();
+            return;
+        }
+        action.run();
+    }
+
+    private void confirmOpenclawRestore(File backupFile) {
+        String createdAtText = formatBackupTimestamp(readBackupCreatedAt(backupFile));
+        String message = "Restore OpenClaw config from:\n"
+            + backupFile.getName()
+            + "\nCreated at: " + createdAtText
+            + "\n\nCurrent config files will be replaced.";
+
+        new AlertDialog.Builder(this)
+            .setTitle("Restore OpenClaw Config")
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Restore", (dialog, which) -> performOpenclawRestore(backupFile))
+            .show();
+    }
+
+    private void performOpenclawRestore(File backupFile) {
+        setButtonEnabled(mOpenclawRestoreButton, false);
+        new Thread(() -> {
+            boolean restored = applyOpenclawBackup(backupFile);
+            runOnUiThread(() -> {
+                setButtonEnabled(mOpenclawRestoreButton, true);
+                if (!restored) {
+                    Toast.makeText(this, "Failed to restore OpenClaw config", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                loadCurrentModel();
+                loadChannelInfo();
+                Toast.makeText(
+                    this,
+                    "OpenClaw config restored\nIncludes openclaw.json and auth-profiles.json (including Telegram botToken).",
+                    Toast.LENGTH_LONG
+                ).show();
+            });
+        }).start();
+    }
+
+    private boolean applyOpenclawBackup(File backupFile) {
+        JSONObject backupPayload = readJsonFromFile(backupFile);
+        if (backupPayload == null) {
+            return false;
+        }
+
+        JSONObject openclawConfig = backupPayload.optJSONObject(OPENCLAW_BACKUP_META_OPENCLAW_CONFIG_KEY);
+        JSONObject authProfiles = backupPayload.optJSONObject(OPENCLAW_BACKUP_META_AUTH_PROFILES_KEY);
+        int restoredCount = 0;
+
+        if (openclawConfig != null && writeJsonToFile(new File(OPENCLAW_CONFIG_FILE), openclawConfig)) {
+            restoredCount++;
+        }
+        if (authProfiles != null && writeJsonToFile(new File(OPENCLAW_AUTH_PROFILES_FILE), authProfiles)) {
+            restoredCount++;
+        }
+
+        return restoredCount > 0;
+    }
+
+    private String createOpenclawBackupFile() {
+        JSONObject openclawConfig = readJsonFromFile(new File(OPENCLAW_CONFIG_FILE));
+        JSONObject authProfiles = readJsonFromFile(new File(OPENCLAW_AUTH_PROFILES_FILE));
+        if (openclawConfig == null && authProfiles == null) {
+            return null;
+        }
+
+        File backupDir = getOpenclawBackupDirectory();
+        if (!backupDir.exists() && !backupDir.mkdirs()) {
+            return null;
+        }
+
+            File backupFile = new File(
+            backupDir,
+            OPENCLAW_BACKUP_FILE_PREFIX + formatBackupTimestamp(System.currentTimeMillis()) + OPENCLAW_BACKUP_FILE_EXTENSION
+        );
+
+        try {
+            JSONObject backupPayload = new JSONObject();
+            backupPayload.put("version", 1);
+            backupPayload.put(OPENCLAW_BACKUP_META_CREATED_AT_KEY, System.currentTimeMillis());
+            backupPayload.put(OPENCLAW_BACKUP_META_OPENCLAW_CONFIG_KEY,
+                openclawConfig == null ? JSONObject.NULL : openclawConfig);
+            backupPayload.put(OPENCLAW_BACKUP_META_AUTH_PROFILES_KEY,
+                authProfiles == null ? JSONObject.NULL : authProfiles);
+
+            try (FileWriter writer = new FileWriter(backupFile)) {
+                writer.write(backupPayload.toString(2));
+            }
+
+            return backupFile.getAbsolutePath();
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to write OpenClaw backup: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private File getLatestOpenclawBackupFile() {
+        File backupDir = getOpenclawBackupDirectory();
+        if (!backupDir.exists() || !backupDir.isDirectory()) {
+            return null;
+        }
+
+        File[] candidates = backupDir.listFiles((dir, name) ->
+            name != null && name.startsWith(OPENCLAW_BACKUP_FILE_PREFIX) && name.endsWith(OPENCLAW_BACKUP_FILE_EXTENSION)
+        );
+        if (candidates == null || candidates.length == 0) {
+            return null;
+        }
+
+        Arrays.sort(candidates, Comparator.comparingLong(File::lastModified));
+        return candidates[candidates.length - 1];
+    }
+
+    private File getOpenclawBackupDirectory() {
+        File documentsDir = Environment.getExternalStorageDirectory();
+        return new File(documentsDir, OPENCLAW_BACKUP_DIRECTORY);
+    }
+
+    private long readBackupCreatedAt(File backupFile) {
+        if (backupFile == null || !backupFile.exists()) {
+            return 0L;
+        }
+        JSONObject backupPayload = readJsonFromFile(backupFile);
+        if (backupPayload == null) {
+            return backupFile.lastModified();
+        }
+        return backupPayload.optLong(OPENCLAW_BACKUP_META_CREATED_AT_KEY, backupFile.lastModified());
+    }
+
+    private String formatBackupTimestamp(long timeMs) {
+        if (timeMs <= 0L) {
+            timeMs = System.currentTimeMillis();
+        }
+        return new SimpleDateFormat(OPENCLAW_BACKUP_DATE_PATTERN, Locale.US).format(new Date(timeMs));
+    }
+
+    private JSONObject readJsonFromFile(File file) {
+        if (file == null || !file.exists()) {
+            return null;
+        }
+
+        try (FileReader reader = new FileReader(file)) {
+            StringBuilder sb = new StringBuilder();
+            char[] buffer = new char[1024];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                sb.append(buffer, 0, read);
+            }
+            return new JSONObject(sb.toString());
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "Failed to read JSON from " + file.getAbsolutePath() + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean writeJsonToFile(File target, JSONObject content) {
+        if (target == null || content == null) {
+            return false;
+        }
+
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            return false;
+        }
+
+        try (FileWriter writer = new FileWriter(target)) {
+            writer.write(content.toString(2));
+            target.setReadable(false, false);
+            target.setReadable(true, true);
+            target.setWritable(false, false);
+            target.setWritable(true, true);
+            return true;
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to write JSON to " + target.getAbsolutePath() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void setButtonEnabled(TextView button, boolean enabled) {
+        if (button == null) {
+            return;
+        }
+        button.setEnabled(enabled);
+        button.setAlpha(enabled ? 1f : 0.5f);
     }
 
     /**
@@ -1450,6 +1750,11 @@ public class DashboardActivity extends Activity {
         template.model = fullModel;
         if (!TextUtils.isEmpty(optionalApiKey)) {
             template.apiKey = optionalApiKey;
+        }
+        if (isCustomProvider && availableModels != null && !availableModels.isEmpty()) {
+            template.customModels = new ArrayList<>(availableModels);
+        } else if (!isCustomProvider) {
+            template.customModels = null;
         }
         if (!TextUtils.isEmpty(optionalBaseUrl)) {
             template.baseUrl = optionalBaseUrl;

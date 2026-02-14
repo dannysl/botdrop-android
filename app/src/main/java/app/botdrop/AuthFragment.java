@@ -26,6 +26,7 @@ import com.termux.R;
 import com.termux.shared.logger.Logger;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -332,6 +333,11 @@ public class AuthFragment extends Fragment implements SetupActivity.StepFragment
             template.provider = providerId;
             template.model = mSelectedModel != null ? mSelectedModel : fullModel;
             template.apiKey = credential;
+            if (isCustomProvider && !TextUtils.isEmpty(baseUrl) && mCurrentCustomModels != null && !mCurrentCustomModels.isEmpty()) {
+                template.customModels = new ArrayList<>(mCurrentCustomModels);
+            } else if (!isCustomProvider) {
+                template.customModels = null;
+            }
             if (isCustomProvider && !TextUtils.isEmpty(baseUrl)) {
                 template.baseUrl = baseUrl;
             }

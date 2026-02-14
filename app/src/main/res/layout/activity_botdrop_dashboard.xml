@@ -205,6 +205,7 @@
                     android:textColor="@color/botdrop_accent"
                     android:paddingStart="0dp"
                     android:paddingEnd="0dp" />
+
         </LinearLayout>
 
         <!-- Startup Notice -->
@@ -413,6 +414,35 @@
             android:background="@drawable/botdrop_button_bg"
             android:textColor="#1A1A1A"
             android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_backup_openclaw_config"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="Backup"
+                android:textAllCaps="false"
+                android:background="@drawable/botdrop_button_outline_bg"
+                android:textColor="@color/botdrop_accent" />
+
+            <Button
+                android:id="@+id/btn_restore_openclaw_config"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Restore"
+                android:textAllCaps="false"
+                android:background="@drawable/botdrop_button_outline_bg"
+                android:textColor="@color/botdrop_accent" />
+        </LinearLayout>
 
         <!-- Guidance Card -->
         <LinearLayout
