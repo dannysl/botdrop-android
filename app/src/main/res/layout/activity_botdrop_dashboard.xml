@@ -167,6 +167,17 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="0dp" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btn_open_openclaw_web_ui"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Open Web UI"
+                    android:textSize="13sp"
+                    android:textColor="@color/botdrop_accent"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp" />
         </LinearLayout>
 
         <!-- Startup Notice -->
