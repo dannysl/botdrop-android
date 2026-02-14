@@ -52,11 +52,25 @@ public class AgentSelectionFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         Button installButton = view.findViewById(R.id.agent_openclaw_install);
+        final boolean isOpenclawInstalled = BotDropService.isOpenclawInstalled();
+        installButton.setText(isOpenclawInstalled ? "Open" : "Install");
         installButton.setOnClickListener(v -> {
-            Logger.logInfo(LOG_TAG, "OpenClaw selected for installation");
-            SetupActivity activity = (SetupActivity) getActivity();
-            if (activity != null && !activity.isFinishing()) {
-                activity.goToNextStep();
+            if (isOpenclawInstalled) {
+                Logger.logInfo(LOG_TAG, "OpenClaw already installed, opening dashboard");
+                Context ctx = getContext();
+                if (ctx != null) {
+                    Intent dashboardIntent = new Intent(ctx, DashboardActivity.class);
+                    startActivity(dashboardIntent);
+                }
+                if (getActivity() instanceof SetupActivity && !getActivity().isFinishing()) {
+                    getActivity().finish();
+                }
+            } else {
+                Logger.logInfo(LOG_TAG, "OpenClaw selected for installation");
+                SetupActivity activity = (SetupActivity) getActivity();
+                if (activity != null && !activity.isFinishing()) {
+                    activity.goToNextStep();
+                }
             }
         });
 

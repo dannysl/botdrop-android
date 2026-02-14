@@ -21,6 +21,7 @@ import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -114,6 +115,7 @@ public class DashboardActivity extends Activity {
     private TextView mOpenclawCheckUpdateButton;
     private TextView mOpenclawLogButton;
     private TextView mOpenclawWebUiButton;
+    private ImageButton mBackToAgentSelectionButton;
     private String mOpenclawLatestUpdateVersion;
     private AlertDialog mOpenclawUpdateDialog;
     private boolean mOpenclawManualCheckRequested;
@@ -211,6 +213,10 @@ public class DashboardActivity extends Activity {
         if (mOpenclawLogButton != null) {
             mOpenclawLogButton.setOnClickListener(v -> showOpenclawLog());
         }
+        mBackToAgentSelectionButton = findViewById(R.id.btn_back_to_agent_selection);
+        if (mBackToAgentSelectionButton != null) {
+            mBackToAgentSelectionButton.setOnClickListener(v -> openAgentSelection());
+        }
         mOpenclawWebUiButton = findViewById(R.id.btn_open_openclaw_web_ui);
         if (mOpenclawWebUiButton != null) {
             mOpenclawWebUiButton.setOnClickListener(v -> openOpenclawWebUi());
@@ -234,6 +240,14 @@ public class DashboardActivity extends Activity {
         if (stored != null) {
             showUpdateBanner(stored[0], stored[1]);
         }
+    }
+
+    private void openAgentSelection() {
+        Intent intent = new Intent(this, SetupActivity.class);
+        intent.putExtra(SetupActivity.EXTRA_START_STEP, SetupActivity.STEP_AGENT_SELECT);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(intent);
+        finish();
     }
 
     @Override
@@ -1608,7 +1622,13 @@ public class DashboardActivity extends Activity {
             .setTitle("Update available")
             .setMessage(content)
             .setCancelable(true)
-            .setPositiveButton("Update", (d, w) -> startOpenclawUpdate(updateVersion))
+            .setPositiveButton(manualCheck ? "Open" : "Update", (d, w) -> {
+                if (manualCheck) {
+                    openBotdropWebsite();
+                } else {
+                    startOpenclawUpdate(updateVersion);
+                }
+            })
             .setNeutralButton("Later", null)
             .setNegativeButton("Dismiss", (d, w) -> dismissOpenclawUpdate(updateVersion))
             .setOnDismissListener(dialog -> {
@@ -1621,6 +1641,15 @@ public class DashboardActivity extends Activity {
         mOpenclawUpdateDialog.show();
         if (mOpenclawManualCheckRequested) {
             mOpenclawManualCheckRequested = false;
+        }
+    }
+
+    private void openBotdropWebsite() {
+        try {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://botdrop.app/"));
+            startActivity(browserIntent);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show();
         }
     }
 

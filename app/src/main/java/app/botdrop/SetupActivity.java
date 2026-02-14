@@ -1,6 +1,7 @@
 package app.botdrop;
 
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -29,6 +30,7 @@ import com.termux.shared.logger.Logger;
 public class SetupActivity extends AppCompatActivity {
 
     private static final String LOG_TAG = "SetupActivity";
+    private static final String BOTDROP_UPDATE_URL = "https://botdrop.app/";
 
     /**
      * Interface for fragments to intercept Next button behavior
@@ -111,9 +113,12 @@ public class SetupActivity extends AppCompatActivity {
             UpdateChecker.forceCheck(this, (version, url, notes) -> {
                 v.setEnabled(true);
                 if (version != null && !version.isEmpty()) {
-                    // Show update available message
-                    Toast.makeText(this, "Update available: v" + version, Toast.LENGTH_SHORT).show();
-                    // Could show a dialog or banner here
+                    new AlertDialog.Builder(this)
+                        .setTitle("Update available")
+                        .setMessage("Update available: v" + version + "\n\nWould you like to open the update page?")
+                        .setPositiveButton("Open", (d, w) -> openBotdropUpdatePage())
+                        .setNegativeButton("Cancel", null)
+                        .show();
                 } else {
                     Toast.makeText(this, "No updates available", Toast.LENGTH_SHORT).show();
                 }
@@ -122,8 +127,16 @@ public class SetupActivity extends AppCompatActivity {
 
         Logger.logDebug(LOG_TAG, "SetupActivity created, starting at step " + startStep);
 
-        // Check for cached config and offer restore
-        showRestoreConfigDialog();
+        // Restore Configuration dialog is intentionally disabled.
+    }
+
+    private void openBotdropUpdatePage() {
+        try {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(BOTDROP_UPDATE_URL));
+            startActivity(browserIntent);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**
