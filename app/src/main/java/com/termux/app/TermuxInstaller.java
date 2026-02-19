@@ -497,6 +497,22 @@ public final class TermuxInstaller {
                 "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n" +
                 "BOTDROP_OPENCLAW_WRAPPER\n" +
                 "    chmod 755 $PREFIX/bin/openclaw\n" +
+                "    KOFFI_DIR=\"$PREFIX/lib/node_modules/openclaw/node_modules/koffi\"\n" +
+                "    KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
+                "    if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
+                "      if [ ! -f \"$KOFFI_INDEX.orig\" ]; then\n" +
+                "        cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
+                "      fi\n" +
+                "      cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
+                "module.exports = {\n" +
+                "  load() {\n" +
+                "    throw new Error(\"koffi native module not available on this platform\");\n" +
+                "  }\n" +
+                "};\n" +
+                "BOTDROP_KOFFI_MOCK\n" +
+                "    else\n" +
+                "      echo \"BOTDROP_INFO:Koffi module not found, skip mock patch\"\n" +
+                "    fi\n" +
                 "    echo \"BOTDROP_STEP:2:DONE\"\n" +
                 "    touch \"$MARKER\"\n" +
                 "    echo \"BOTDROP_COMPLETE\"\n" +

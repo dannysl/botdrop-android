@@ -624,7 +624,26 @@ public class BotDropService extends Service {
                     return;
                 }
 
-                // Step 4: Start gateway
+                // Step 4: Re-apply koffi mock for Android compatibility
+                Logger.logInfo(LOG_TAG, "Update: patching koffi");
+                notifyUpdateStep(callback, "Patching Koffi...");
+                String koffiPatchCmd = buildKoffiMockPatchScript();
+                CommandResult koffiPatchResult = executeCommandSync(koffiPatchCmd, 30);
+                if (!koffiPatchResult.success) {
+                    Logger.logError(
+                        LOG_TAG,
+                        "Update: failed to patch koffi (exit " + koffiPatchResult.exitCode + "): "
+                            + extractTail(koffiPatchResult.stdout, 20)
+                    );
+                    notifyUpdateError(
+                        callback,
+                        notified,
+                        "Failed to apply Android-compatible koffi patch (npm update may be incomplete)"
+                    );
+                    return;
+                }
+
+                // Step 5: Start gateway
                 Logger.logInfo(LOG_TAG, "Update: starting gateway");
                 notifyUpdateStep(callback, "Starting gateway...");
                 BotDropConfig.sanitizeLegacyConfig();
@@ -672,6 +691,23 @@ public class BotDropService extends Service {
             "sleep 1\n" +
             "pkill -9 -f \"openclaw.*gateway\" 2>/dev/null || true\n" +
             "echo stopped\n";
+    }
+
+    private String buildKoffiMockPatchScript() {
+        return "KOFFI_DIR=\"" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules/openclaw/node_modules/koffi\"\n" +
+            "KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
+            "if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
+            "  if [ ! -f \"$KOFFI_INDEX.orig\" ]; then\n" +
+            "    cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
+            "  fi\n" +
+            "  cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
+            "module.exports = {\n" +
+            "  load() {\n" +
+            "    throw new Error(\"koffi native module not available on this platform\");\n" +
+            "  }\n" +
+            "};\n" +
+            "BOTDROP_KOFFI_MOCK\n" +
+            "fi\n";
     }
 
     private String normalizeOpenclawVersion(String targetVersion) {
