@@ -134,3 +134,8 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Purge version API cache
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          curl -sf "https://api.botdrop.app/purge?key=${{ secrets.BOTDROP_API_PURGE_KEY }}" || echo "Cache purge failed (non-fatal)"
