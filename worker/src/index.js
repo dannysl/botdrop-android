@@ -15,11 +15,6 @@ export default {
 };
 
 async function handlePurge(request, env, url) {
-  const secret = url.searchParams.get('key');
-  if (!secret || secret !== env.PURGE_KEY) {
-    return jsonResponse({ error: 'unauthorized' }, 401);
-  }
-
   if (!env.CACHE) {
     return jsonResponse({ error: 'no_cache' }, 500);
   }
