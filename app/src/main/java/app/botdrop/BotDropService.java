@@ -449,6 +449,22 @@ public class BotDropService extends Service {
             "echo \"NODE_OPTIONS=$NODE_OPTIONS\" >&2\n" +
             "echo \"Testing cert file access:\" >&2\n" +
             "ls -lh $PREFIX/etc/tls/cert.pem >&2 || echo \"cert.pem not found!\" >&2\n" +
+            "# Ensure koffi mock is applied (overlay installs skip bootstrap/update)\n" +
+            "KOFFI_DIR=\"$PREFIX/lib/node_modules/openclaw/node_modules/koffi\"\n" +
+            "KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
+            "if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
+            "  if ! grep -q 'koffi native module not available' \"$KOFFI_INDEX\" 2>/dev/null; then\n" +
+            "    [ ! -f \"$KOFFI_INDEX.orig\" ] && cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
+            "    cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
+            "module.exports = {\n" +
+            "  load() {\n" +
+            "    throw new Error(\"koffi native module not available on this platform\");\n" +
+            "  }\n" +
+            "};\n" +
+            "BOTDROP_KOFFI_MOCK\n" +
+            "    echo \"koffi mock applied\" >&2\n" +
+            "  fi\n" +
+            "fi\n" +
             "# Start gateway (openclaw wrapper handles termux-chroot)\n" +
             "openclaw gateway run --force >> " + GATEWAY_LOG_FILE + " 2>&1 &\n" +
             "GW_PID=$!\n" +
