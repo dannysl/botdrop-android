@@ -19,76 +19,104 @@
         android:layout_marginBottom="32dp" />
 
     <!-- Agent 1: OpenClaw -->
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/agent_openclaw_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
         android:background="@drawable/botdrop_card_bg"
         android:layout_marginBottom="12dp"
-        android:gravity="center_vertical"
         android:clickable="true"
         android:focusable="true">
 
-        <!-- Icon -->
-        <ImageView
-            android:id="@+id/agent_openclaw_icon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:src="@drawable/agent_openclaw"
-            android:contentDescription="OpenClaw"
-            android:layout_marginEnd="16dp" />
-
-        <!-- Info -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_marginEnd="12dp">
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:gravity="center_vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="OpenClaw"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="@color/botdrop_on_background"
-                android:layout_marginBottom="2dp" />
+            <!-- Icon -->
+            <ImageView
+                android:id="@+id/agent_openclaw_icon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/agent_openclaw"
+                android:contentDescription="OpenClaw"
+                android:layout_marginEnd="16dp" />
 
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- Info -->
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="The AI that actually does things."
-                android:textSize="13sp"
-                android:textColor="@color/botdrop_secondary_text"
-                android:layout_marginBottom="2dp" />
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginEnd="12dp">
 
-            <TextView
-                android:id="@+id/agent_openclaw_url"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="OpenClaw"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/botdrop_on_background"
+                    android:layout_marginBottom="2dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="The AI that actually does things."
+                    android:textSize="13sp"
+                    android:textColor="@color/botdrop_secondary_text"
+                    android:layout_marginBottom="2dp" />
+
+                <TextView
+                    android:id="@+id/agent_openclaw_url"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="openclaw.ai"
+                    android:textSize="12sp"
+                    android:textColor="#1976D2"
+                    android:alpha="0.8" />
+
+            </LinearLayout>
+
+            <!-- Install/Open button -->
+            <Button
+                android:id="@+id/agent_openclaw_install"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="openclaw.ai"
-                android:textSize="12sp"
-                android:textColor="#1976D2"
-                android:alpha="0.8" />
+                android:layout_height="36dp"
+                android:minHeight="36dp"
+                android:text="Install"
+                android:textSize="11sp"
+                android:minWidth="72dp"
+                android:background="@drawable/botdrop_button_bg"
+                android:textColor="#1A1A1A"
+                android:textStyle="bold" />
 
         </LinearLayout>
 
-        <!-- Install button -->
-        <Button
-            android:id="@+id/agent_openclaw_install"
+        <!-- Versions button: top-right corner -->
+        <TextView
+            android:id="@+id/agent_openclaw_version_manager"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:text="Install"
-            android:textSize="13sp"
-            android:minWidth="80dp"
-            android:background="@drawable/botdrop_button_bg"
-            android:textColor="#1A1A1A"
-            android:textStyle="bold" />
+            android:layout_height="wrap_content"
+            android:text="Versions"
+            android:textSize="9sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:gravity="center"
+            android:background="@drawable/botdrop_button_red_outline_bg"
+            android:textColor="@color/botdrop_accent"
+            android:contentDescription="OpenClaw 版本管理"
+            android:layout_gravity="end|top"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="6dp"
+            android:clickable="true"
+            android:focusable="true" />
 
-    </LinearLayout>
+    </FrameLayout>
 
     <!-- Divider -->
     <View
