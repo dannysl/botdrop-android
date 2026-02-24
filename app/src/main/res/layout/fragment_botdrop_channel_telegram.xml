@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/botdrop_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/channel_setup_help_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="@color/botdrop_secondary_text"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/channel_token_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Bot Token"
+            android:textSize="14sp"
+            android:textColor="@color/botdrop_secondary_text"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/channel_token_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Bot token"
+            android:inputType="text"
+            android:padding="14dp"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/botdrop_input_bg"
+            android:textColor="@color/botdrop_on_background"
+            android:textColorHint="@color/botdrop_secondary_text"
+            android:layout_marginBottom="16dp" />
+
+        <LinearLayout
+            android:id="@+id/channel_owner_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/channel_owner_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Owner ID"
+                android:textSize="14sp"
+                android:textColor="@color/botdrop_secondary_text"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/channel_owner_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Owner ID"
+                android:inputType="number"
+                android:padding="14dp"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:background="@drawable/botdrop_input_bg"
+                android:textColor="@color/botdrop_on_background"
+                android:textColorHint="@color/botdrop_secondary_text"
+                android:layout_marginBottom="16dp" />
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/channel_open_setup_bot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open @BotDropSetupBot"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/botdrop_button_outline_bg"
+            android:textColor="@color/botdrop_accent" />
+
+        <Button
+            android:id="@+id/channel_connect_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect &amp; Start"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:background="@drawable/botdrop_button_bg"
+            android:textColor="#1A1A1A"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/channel_skip_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Skip for now"
+            android:textSize="14sp"
+            android:padding="14dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/botdrop_button_outline_bg"
+            android:textColor="@color/botdrop_accent"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/channel_error_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#F44336"
+            android:visibility="gone"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+
+</ScrollView>

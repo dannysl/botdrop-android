@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -79,7 +80,6 @@ public class DashboardActivity extends Activity {
 
     private static final String LOG_TAG = "DashboardActivity";
     public static final String NOTIFICATION_CHANNEL_ID = "botdrop_gateway";
-    public static final String EXTRA_OPENCLAW_VERSION_MANAGER = "openclaw_open_version_manager";
     private static final int STATUS_REFRESH_INTERVAL_MS = 5000; // 5 seconds
     private static final int ERROR_CHECK_INTERVAL_MS = 15000; // 15 seconds
     private static final String MODEL_LIST_COMMAND = "openclaw models list --all --plain";
@@ -142,7 +142,10 @@ public class DashboardActivity extends Activity {
     private View mStatusIndicator;
     private TextView mTelegramStatus;
     private TextView mDiscordStatus;
+    private TextView mFeishuStatus;
     private View mTelegramChannelRow;
+    private View mDiscordChannelRow;
+    private View mFeishuChannelRow;
     private Button mStartButton;
     private Button mStopButton;
     private Button mRestartButton;
@@ -167,7 +170,6 @@ public class DashboardActivity extends Activity {
     private boolean mUiVisible = true;
     private boolean mOpenclawWebUiOpening;
     private boolean mOpenclawVersionActionInProgress;
-    private boolean mOpenclawVersionManagerAutoOpen;
 
     private BotDropService mBotDropService;
     private boolean mBound = false;
@@ -210,10 +212,6 @@ public class DashboardActivity extends Activity {
             // Check for OpenClaw updates
             checkOpenclawUpdate();
 
-            if (mOpenclawVersionManagerAutoOpen) {
-                mOpenclawVersionManagerAutoOpen = false;
-                showOpenclawVersionManagerDialog();
-            }
         }
 
         @Override
@@ -238,7 +236,10 @@ public class DashboardActivity extends Activity {
         mStatusIndicator = findViewById(R.id.status_indicator);
         mTelegramStatus = findViewById(R.id.telegram_status);
         mDiscordStatus = findViewById(R.id.discord_status);
+        mFeishuStatus = findViewById(R.id.feishu_status);
         mTelegramChannelRow = findViewById(R.id.telegram_channel_row);
+        mDiscordChannelRow = findViewById(R.id.discord_channel_row);
+        mFeishuChannelRow = findViewById(R.id.feishu_channel_row);
         mStartButton = findViewById(R.id.btn_start);
         mStopButton = findViewById(R.id.btn_stop);
         mRestartButton = findViewById(R.id.btn_restart);
@@ -289,7 +290,19 @@ public class DashboardActivity extends Activity {
             mOpenclawRestoreButton.setOnClickListener(v -> restoreOpenclawConfigFromSdcard());
         }
         if (mTelegramChannelRow != null) {
-            mTelegramChannelRow.setOnClickListener(v -> openTelegramChannelConfig());
+            mTelegramChannelRow.setOnClickListener(
+                v -> openChannelConfig(ChannelConfigMeta.PLATFORM_TELEGRAM)
+            );
+        }
+        if (mDiscordChannelRow != null) {
+            mDiscordChannelRow.setOnClickListener(
+                v -> openChannelConfig(ChannelConfigMeta.PLATFORM_DISCORD)
+            );
+        }
+        if (mFeishuChannelRow != null) {
+            mFeishuChannelRow.setOnClickListener(
+                v -> openChannelConfig(ChannelConfigMeta.PLATFORM_FEISHU)
+            );
         }
 
         // Load channel info
@@ -321,7 +334,6 @@ public class DashboardActivity extends Activity {
             showUpdateBanner(stored[0], stored[1]);
         }
 
-        mOpenclawVersionManagerAutoOpen = getIntent().getBooleanExtra(EXTRA_OPENCLAW_VERSION_MANAGER, false);
     }
 
     private void openAgentSelection() {
@@ -371,6 +383,7 @@ public class DashboardActivity extends Activity {
             startStatusRefresh();
             refreshStatus();
         }
+        loadChannelInfo();
     }
 
     @Override
@@ -1255,9 +1268,12 @@ public class DashboardActivity extends Activity {
         }
     }
 
-    private void openTelegramChannelConfig() {
+    private void openChannelConfig(String platform) {
         Intent intent = new Intent(this, SetupActivity.class);
         intent.putExtra(SetupActivity.EXTRA_START_STEP, SetupActivity.STEP_CHANNEL);
+        if (!TextUtils.isEmpty(platform)) {
+            intent.putExtra(SetupActivity.EXTRA_CHANNEL_PLATFORM, platform);
+        }
         startActivity(intent);
     }
 
@@ -1290,6 +1306,10 @@ public class DashboardActivity extends Activity {
         mTelegramStatus.setTextColor(ContextCompat.getColor(this, R.color.status_disconnected));
         mDiscordStatus.setText("○ —");
         mDiscordStatus.setTextColor(ContextCompat.getColor(this, R.color.status_disconnected));
+        if (mFeishuStatus != null) {
+            mFeishuStatus.setText("○ —");
+            mFeishuStatus.setTextColor(ContextCompat.getColor(this, R.color.status_disconnected));
+        }
 
         try {
             JSONObject config = BotDropConfig.readConfig();
@@ -1308,16 +1328,75 @@ public class DashboardActivity extends Activity {
             }
 
             JSONObject discord = channels.optJSONObject("discord");
-            boolean discordConnected = discord != null
-                    && discord.optBoolean("enabled", true)
-                    && !TextUtils.isEmpty(discord.optString("token", "").trim());
+            boolean discordConnected = isDiscordConfigured(discord);
             if (discordConnected) {
                 mDiscordStatus.setText("● Connected");
                 mDiscordStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             }
+
+            JSONObject feishu = channels.optJSONObject("feishu");
+            String feishuAppId = "";
+            String feishuAppSecret = "";
+            if (feishu != null) {
+                JSONObject accounts = feishu.optJSONObject("accounts");
+                JSONObject mainAccount = accounts != null ? accounts.optJSONObject("main") : null;
+                if (mainAccount != null) {
+                    feishuAppId = mainAccount.optString("appId", "").trim();
+                    feishuAppSecret = mainAccount.optString("appSecret", "").trim();
+                }
+            }
+            String feishuDmPolicy = feishu != null ? feishu.optString("dmPolicy", "").trim() : "";
+            JSONArray feishuAllowFrom = feishu != null ? feishu.optJSONArray("allowFrom") : null;
+            boolean feishuHasAllowFrom = feishuAllowFrom != null && feishuAllowFrom.length() > 0;
+            boolean feishuAllowListReady = "allowlist".equals(feishuDmPolicy) && feishuHasAllowFrom;
+            boolean feishuPairingReady = "pairing".equals(feishuDmPolicy) || TextUtils.isEmpty(feishuDmPolicy);
+            boolean feishuConnected = feishu != null
+                    && feishu.optBoolean("enabled", true)
+                    && !TextUtils.isEmpty(feishuAppId)
+                    && !TextUtils.isEmpty(feishuAppSecret)
+                    && (feishuAllowListReady || feishuPairingReady);
+            if (feishuConnected && mFeishuStatus != null) {
+                mFeishuStatus.setText("● Connected");
+                mFeishuStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
+            }
         } catch (Exception e) {
             Logger.logError(LOG_TAG, "Failed to load channel info: " + e.getMessage());
         }
+    }
+
+    private boolean isDiscordConfigured(JSONObject discord) {
+        if (discord == null) {
+            return false;
+        }
+        if (!discord.optBoolean("enabled", true)) {
+            return false;
+        }
+        String token = discord.optString("token", "").trim();
+        if (TextUtils.isEmpty(token)) {
+            return false;
+        }
+
+        JSONObject guilds = discord.optJSONObject("guilds");
+        if (guilds == null || guilds.length() == 0) {
+            return false;
+        }
+
+        Iterator<String> guildIterator = guilds.keys();
+        while (guildIterator.hasNext()) {
+            JSONObject guildConfig = guilds.optJSONObject(guildIterator.next());
+            if (guildConfig == null) {
+                continue;
+            }
+            JSONObject channels = guildConfig.optJSONObject("channels");
+            if (channels == null || channels.length() == 0) {
+                continue;
+            }
+            Iterator<String> channelIterator = channels.keys();
+            if (channelIterator.hasNext()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

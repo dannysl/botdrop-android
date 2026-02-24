@@ -89,6 +89,7 @@ public class SetupActivity extends AppCompatActivity {
 
     // Intent extra for starting at specific step
     public static final String EXTRA_START_STEP = "start_step";
+    public static final String EXTRA_CHANNEL_PLATFORM = "channel_platform";
 
     private ViewPager2 mViewPager;
     private SetupPagerAdapter mAdapter;

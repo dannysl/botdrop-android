@@ -2,6 +2,8 @@ package app.botdrop;
 
 import android.util.Base64;
 
+import android.text.TextUtils;
+
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
@@ -39,11 +41,12 @@ public class ChannelSetupHelper {
      * Platform codes:
      * - tg = Telegram
      * - dc = Discord
+     * - fs = Feishu
      * 
      * Base64 JSON structure:
      * {
      *   "v": 1,
-     *   "platform": "telegram" | "discord",
+     *   "platform": "telegram" | "discord" | "feishu",
      *   "bot_token": "...",
      *   "owner_id": "...",
      *   "created_at": 1234567890
@@ -81,7 +84,8 @@ public class ChannelSetupHelper {
             // Fallback: infer platform from code if not in JSON
             if (platform == null) {
                 platform = platformCode.equals("tg") ? "telegram" :
-                          platformCode.equals("dc") ? "discord" : null;
+                          platformCode.equals("dc") ? "discord" :
+                          platformCode.equals("fs") ? "feishu" : null;
             }
 
             if (platform == null || botToken == null || ownerId == null) {
@@ -101,8 +105,8 @@ public class ChannelSetupHelper {
     /**
      * Write channel configuration to openclaw.json
      *
-     * For Telegram: { channels: { telegram: { enabled: true, botToken: "...", dmPolicy: "pairing" } } }
-     * For Discord:  { channels: { discord: { enabled: true, token: "..." } } }
+     * For Telegram: { channels: { telegram: { enabled: true, botToken: "...", dmPolicy: "allowlist" } } }
+     * For Discord:  { channels: { discord: { enabled: true, token: "...", groupPolicy: "allowlist", guilds: { ... } } } }
      *
      * @param platform "telegram" or "discord"
      * @param botToken Bot token
@@ -110,6 +114,99 @@ public class ChannelSetupHelper {
      * @return true if successful
      */
     public static boolean writeChannelConfig(String platform, String botToken, String ownerId) {
+        return writeChannelConfig(platform, botToken, ownerId, null, null);
+    }
+
+    /**
+     * Write Feishu configuration to openclaw.json.
+     *
+     * For Feishu:
+     * {
+     *   channels: {
+     *     feishu: {
+     *       enabled: true,
+     *       dmPolicy: "pairing", // default when user id is empty
+     *       allowFrom: ["user-id"], // optional, required when dmPolicy is allowlist
+     *       accounts: {
+     *         main: { appId: "...", appSecret: "..." }
+     *       }
+     *     }
+     *   }
+     * }
+     *
+     * @param appId Feishu app ID
+     * @param appSecret Feishu app secret
+     * @param userId Feishu user open_id. Optional. If provided, dmPolicy is allowlist.
+     * @return true if successful
+     */
+    public static boolean writeFeishuChannelConfig(String appId, String appSecret, String userId) {
+        try {
+            JSONObject config = BotDropConfig.readConfig();
+
+            if (!config.has("channels")) {
+                config.put("channels", new JSONObject());
+            }
+
+            JSONObject channels = config.getJSONObject("channels");
+            JSONObject feishu = new JSONObject();
+            feishu.put("enabled", true);
+            boolean hasUserId = !TextUtils.isEmpty(userId);
+            feishu.put("dmPolicy", hasUserId ? "allowlist" : "pairing");
+            if (!TextUtils.isEmpty(userId)) {
+                JSONArray allowFrom = new JSONArray();
+                allowFrom.put(userId);
+                feishu.put("allowFrom", allowFrom);
+            }
+
+            JSONObject accounts = new JSONObject();
+            JSONObject mainAccount = new JSONObject();
+            mainAccount.put("appId", appId);
+            mainAccount.put("appSecret", appSecret);
+            accounts.put("main", mainAccount);
+            feishu.put("accounts", accounts);
+            channels.put("feishu", feishu);
+
+            if (!config.has("plugins")) {
+                config.put("plugins", new JSONObject());
+            }
+            JSONObject plugins = config.getJSONObject("plugins");
+            if (!plugins.has("entries")) {
+                plugins.put("entries", new JSONObject());
+            }
+            JSONObject entries = plugins.getJSONObject("entries");
+            JSONObject pluginEntry = new JSONObject();
+            pluginEntry.put("enabled", true);
+            entries.put("feishu", pluginEntry);
+
+            Logger.logInfo(LOG_TAG, "Writing channel config for platform: feishu");
+            return BotDropConfig.writeConfig(config);
+
+        } catch (JSONException e) {
+            Logger.logError(LOG_TAG, "Failed to write channel config: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Write channel configuration to openclaw.json
+     *
+     * For Telegram: { channels: { telegram: { enabled: true, botToken: "...", dmPolicy: "allowlist" } } }
+     * For Discord:  { channels: { discord: { enabled: true, token: "...", groupPolicy: "allowlist", guilds: { ... } } } }
+     *
+     * @param platform "telegram" or "discord"
+     * @param botToken Bot token
+     * @param ownerId User ID who owns/controls the bot (used for allowFrom)
+     * @param guildId Discord guild ID (optional for non-discord platforms)
+     * @param channelId Discord channel ID (optional for non-discord platforms)
+     * @return true if successful
+     */
+    public static boolean writeChannelConfig(
+        String platform,
+        String botToken,
+        String ownerId,
+        String guildId,
+        String channelId
+    ) {
         try {
             JSONObject config = BotDropConfig.readConfig();
 
@@ -135,6 +232,21 @@ public class ChannelSetupHelper {
                 JSONObject discord = new JSONObject();
                 discord.put("enabled", true);
                 discord.put("token", botToken);
+                discord.put("groupPolicy", "allowlist");
+
+                if (!TextUtils.isEmpty(guildId) && !TextUtils.isEmpty(channelId)) {
+                    JSONObject guilds = new JSONObject();
+                    JSONObject guild = new JSONObject();
+                    JSONObject guildChannels = new JSONObject();
+                    JSONObject channel = new JSONObject();
+                    channel.put("allow", true);
+                    channel.put("requireMention", false);
+                    channel.put("autoThread", false);
+                    guildChannels.put(channelId, channel);
+                    guild.put("channels", guildChannels);
+                    guilds.put(guildId, guild);
+                    discord.put("guilds", guilds);
+                }
                 channels.put("discord", discord);
 
             } else {

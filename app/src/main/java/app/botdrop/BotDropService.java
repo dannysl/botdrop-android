@@ -413,77 +413,10 @@ public class BotDropService extends Service {
         // This matters for in-place upgrades where users won't re-run channel setup.
         BotDropConfig.sanitizeLegacyConfig();
 
-        String logDir = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw";
-        String debugLog = logDir + "/gateway-debug.log";
-        String home = TermuxConstants.TERMUX_HOME_DIR_PATH;
-        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
-        // Shell trace (set -x) goes to debug log via fd 2 redirect;
-        // stdout still goes back to Java for success/error reporting.
-        String cmd =
-            "mkdir -p " + logDir + "\n" +
-            "exec 2>" + debugLog + "\n" +
-            "set -x\n" +
-            "echo \"date: $(date)\" >&2\n" +
-            "echo \"id: $(id)\" >&2\n" +
-            "echo \"PATH=$PATH\" >&2\n" +
-            "# sshd\n" +
-            "pgrep -x sshd || sshd || true\n" +
-            "# kill old gateway\n" +
-            "pkill -f \"openclaw.*gateway\" 2>/dev/null || true\n" +
-            "if [ -f " + GATEWAY_PID_FILE + " ]; then\n" +
-            "  kill $(cat " + GATEWAY_PID_FILE + ") 2>/dev/null\n" +
-            "  rm -f " + GATEWAY_PID_FILE + "\n" +
-            "  sleep 1\n" +
-            "fi\n" +
-            "sleep 1\n" +
-            "# start gateway\n" +
-            "echo '' > " + GATEWAY_LOG_FILE + "\n" +
-            "export HOME=" + home + "\n" +
-            "export PREFIX=" + prefix + "\n" +
-            "export PATH=$PREFIX/bin:$PATH\n" +
-            "export TMPDIR=$PREFIX/tmp\n" +
-            "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
-            "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
-            "echo \"=== Environment before chroot ===\" >&2\n" +
-            "echo \"SSL_CERT_FILE=$SSL_CERT_FILE\" >&2\n" +
-            "echo \"NODE_OPTIONS=$NODE_OPTIONS\" >&2\n" +
-            "echo \"Testing cert file access:\" >&2\n" +
-            "ls -lh $PREFIX/etc/tls/cert.pem >&2 || echo \"cert.pem not found!\" >&2\n" +
-            "# Ensure koffi mock is applied (overlay installs skip bootstrap/update)\n" +
-            "KOFFI_DIR=\"$PREFIX/lib/node_modules/openclaw/node_modules/koffi\"\n" +
-            "KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
-            "if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
-            "  if ! grep -q 'koffi native module not available' \"$KOFFI_INDEX\" 2>/dev/null; then\n" +
-            "    [ ! -f \"$KOFFI_INDEX.orig\" ] && cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
-            "    cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
-            "module.exports = {\n" +
-            "  load() {\n" +
-            "    throw new Error(\"koffi native module not available on this platform\");\n" +
-            "  }\n" +
-            "};\n" +
-            "BOTDROP_KOFFI_MOCK\n" +
-            "    echo \"koffi mock applied\" >&2\n" +
-            "  fi\n" +
-            "fi\n" +
-            "# Start gateway (openclaw wrapper handles termux-chroot)\n" +
-            "openclaw gateway run --force >> " + GATEWAY_LOG_FILE + " 2>&1 &\n" +
-            "GW_PID=$!\n" +
-            "echo $GW_PID > " + GATEWAY_PID_FILE + "\n" +
-            "echo \"gateway pid: $GW_PID\" >&2\n" +
-            "sleep 3\n" +
-            "if kill -0 $GW_PID 2>/dev/null; then\n" +
-            "  echo started\n" +
-            "else\n" +
-            "  echo \"gateway died, log:\" >&2\n" +
-            "  cat " + GATEWAY_LOG_FILE + " >&2\n" +
-            "  rm -f " + GATEWAY_PID_FILE + "\n" +
-            "  # return error info to Java via stdout\n" +
-            "  cat " + GATEWAY_LOG_FILE + "\n" +
-            "  echo '---'\n" +
-            "  cat " + debugLog + "\n" +
-            "  exit 1\n" +
-            "fi\n";
-        executeCommand(cmd, callback);
+        mExecutor.execute(() -> {
+            CommandResult startResult = executeCommandSync(buildStartGatewayScript());
+            mHandler.post(() -> callback.onResult(startResult));
+        });
     }
 
     public void stopGateway(CommandCallback callback) {

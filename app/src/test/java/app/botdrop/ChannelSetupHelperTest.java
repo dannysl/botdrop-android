@@ -79,6 +79,54 @@ public class ChannelSetupHelperTest {
     }
 
     /**
+     * Test: Valid Feishu setup code is correctly decoded
+     */
+    @Test
+    public void testDecodeSetupCode_validFeishu_decodesCorrectly() throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("v", 1);
+        payload.put("platform", "feishu");
+        payload.put("bot_token", "feishu-bot-token-placeholder");
+        payload.put("owner_id", "f2bc8b3e");
+        payload.put("created_at", 1234567890);
+
+        String base64Payload = Base64.encodeToString(
+            payload.toString().getBytes(),
+            Base64.NO_WRAP
+        );
+        String setupCode = "BOTDROP-fs-" + base64Payload;
+
+        ChannelSetupHelper.SetupCodeData data = ChannelSetupHelper.decodeSetupCode(setupCode);
+
+        assertNotNull("Decoded data should not be null", data);
+        assertEquals("feishu", data.platform);
+        assertEquals("feishu-bot-token-placeholder", data.botToken);
+        assertEquals("f2bc8b3e", data.ownerId);
+    }
+
+    /**
+     * Test: Setup code without platform in JSON infers from fs prefix
+     */
+    @Test
+    public void testDecodeSetupCode_feishuPrefixInferred() throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("v", 1);
+        payload.put("bot_token", "fs-token");
+        payload.put("owner_id", "feishu-owner");
+
+        String base64Payload = Base64.encodeToString(
+            payload.toString().getBytes(),
+            Base64.NO_WRAP
+        );
+        String setupCode = "BOTDROP-fs-" + base64Payload;
+
+        ChannelSetupHelper.SetupCodeData data = ChannelSetupHelper.decodeSetupCode(setupCode);
+
+        assertNotNull("Decoded data should not be null", data);
+        assertEquals("feishu", data.platform);
+    }
+
+    /**
      * Test: Setup code without platform in JSON infers from prefix
      */
     @Test
@@ -244,6 +292,29 @@ public class ChannelSetupHelperTest {
 
         // In test environment, should return false but not crash
         assertFalse("Should return false when unable to write to non-existent paths", result);
+    }
+
+    /**
+     * Test: writeChannelConfig for Feishu
+     */
+    @Test
+    public void testWriteChannelConfig_feishu_handlesGracefully() {
+        boolean resultWithoutUser = ChannelSetupHelper.writeFeishuChannelConfig(
+            "feishu-app-id",
+            "feishu-app-secret",
+            ""
+        );
+
+        // In test environment, should return false but not crash
+        assertFalse("Should return false when unable to write to non-existent paths", resultWithoutUser);
+
+        boolean resultWithUser = ChannelSetupHelper.writeFeishuChannelConfig(
+            "feishu-app-id",
+            "feishu-app-secret",
+            "ou_xxx"
+        );
+
+        assertFalse("Should return false when unable to write to non-existent paths", resultWithUser);
     }
 
     /**
