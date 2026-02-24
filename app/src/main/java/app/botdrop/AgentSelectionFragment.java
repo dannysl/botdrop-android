@@ -57,6 +57,7 @@ public class AgentSelectionFragment extends Fragment {
     private boolean mServiceBound = false;
     private AlertDialog mOpenclawVersionManagerDialog;
     private boolean mOpenclawVersionActionInProgress;
+    private long mOpenclawVersionRequestId;
     private int mTapCount = 0;
     private long mFirstTapTime = 0;
 
@@ -183,16 +184,22 @@ public class AgentSelectionFragment extends Fragment {
         }
 
         mOpenclawVersionActionInProgress = true;
+        final long requestId = ++mOpenclawVersionRequestId;
         mOpenclawVersionManagerDialog = new AlertDialog.Builder(ctx)
             .setTitle("OpenClaw Versions")
             .setMessage("Loading versions…")
             .setCancelable(false)
-            .setNegativeButton("Cancel", (d, w) -> mOpenclawVersionActionInProgress = false)
+            .setNegativeButton("Cancel", (d, w) -> {
+                mOpenclawVersionActionInProgress = false;
+                if (requestId == mOpenclawVersionRequestId) {
+                    ++mOpenclawVersionRequestId;
+                }
+            })
             .create();
         mOpenclawVersionManagerDialog.show();
 
         fetchOpenclawVersions((versions, errorMessage) -> {
-            if (getActivity() == null || !isAdded()) {
+            if (requestId != mOpenclawVersionRequestId || getActivity() == null || !isAdded()) {
                 mOpenclawVersionActionInProgress = false;
                 return;
             }
@@ -281,7 +288,10 @@ public class AgentSelectionFragment extends Fragment {
     private void handleOpenclawVersionPick(String version) {
         String picked = normalizeOpenclawVersionForSort(version);
         if (TextUtils.isEmpty(picked)) {
-            Toast.makeText(requireContext(), "Invalid version format", Toast.LENGTH_SHORT).show();
+            Context ctx = getContext();
+            if (ctx != null) {
+                Toast.makeText(ctx, "Invalid version format", Toast.LENGTH_SHORT).show();
+            }
             mOpenclawVersionActionInProgress = false;
             return;
         }
@@ -295,7 +305,10 @@ public class AgentSelectionFragment extends Fragment {
 
         final String installVersion = normalizeOpenclawInstallVersion(picked);
         if (TextUtils.isEmpty(installVersion)) {
-            Toast.makeText(requireContext(), "Invalid install version", Toast.LENGTH_SHORT).show();
+            Context ctx = getContext();
+            if (ctx != null) {
+                Toast.makeText(ctx, "Invalid install version", Toast.LENGTH_SHORT).show();
+            }
             mOpenclawVersionActionInProgress = false;
             return;
         }

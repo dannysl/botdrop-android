@@ -79,7 +79,6 @@ public class DashboardActivity extends Activity {
 
     private static final String LOG_TAG = "DashboardActivity";
     public static final String NOTIFICATION_CHANNEL_ID = "botdrop_gateway";
-    public static final String EXTRA_OPENCLAW_VERSION_MANAGER = "openclaw_open_version_manager";
     private static final int STATUS_REFRESH_INTERVAL_MS = 5000; // 5 seconds
     private static final int ERROR_CHECK_INTERVAL_MS = 15000; // 15 seconds
     private static final String MODEL_LIST_COMMAND = "openclaw models list --all --plain";
@@ -167,7 +166,6 @@ public class DashboardActivity extends Activity {
     private boolean mUiVisible = true;
     private boolean mOpenclawWebUiOpening;
     private boolean mOpenclawVersionActionInProgress;
-    private boolean mOpenclawVersionManagerAutoOpen;
 
     private BotDropService mBotDropService;
     private boolean mBound = false;
@@ -210,10 +208,6 @@ public class DashboardActivity extends Activity {
             // Check for OpenClaw updates
             checkOpenclawUpdate();
 
-            if (mOpenclawVersionManagerAutoOpen) {
-                mOpenclawVersionManagerAutoOpen = false;
-                showOpenclawVersionManagerDialog();
-            }
         }
 
         @Override
@@ -321,7 +315,6 @@ public class DashboardActivity extends Activity {
             showUpdateBanner(stored[0], stored[1]);
         }
 
-        mOpenclawVersionManagerAutoOpen = getIntent().getBooleanExtra(EXTRA_OPENCLAW_VERSION_MANAGER, false);
     }
 
     private void openAgentSelection() {
