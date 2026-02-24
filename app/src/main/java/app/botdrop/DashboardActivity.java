@@ -79,6 +79,7 @@ public class DashboardActivity extends Activity {
 
     private static final String LOG_TAG = "DashboardActivity";
     public static final String NOTIFICATION_CHANNEL_ID = "botdrop_gateway";
+    public static final String EXTRA_OPENCLAW_VERSION_MANAGER = "openclaw_open_version_manager";
     private static final int STATUS_REFRESH_INTERVAL_MS = 5000; // 5 seconds
     private static final int ERROR_CHECK_INTERVAL_MS = 15000; // 15 seconds
     private static final String MODEL_LIST_COMMAND = "openclaw models list --all --plain";
@@ -88,6 +89,8 @@ public class DashboardActivity extends Activity {
     private static final int GATEWAY_DEBUG_LOG_TAIL_LINES = 120;
     private static final int OPENCLAW_WEB_UI_REACHABILITY_RETRY_COUNT = 8;
     private static final int OPENCLAW_WEB_UI_REACHABILITY_RETRY_DELAY_MS = 700;
+    private static final String OPENCLAW_VERSIONS_COMMAND = "npm view openclaw versions --json";
+    private static final int OPENCLAW_VERSION_LIST_LIMIT = 20;
     private static final String OPENCLAW_DASHBOARD_COMMAND = "openclaw dashboard --no-open 2>&1";
     private static final int OPENCLAW_DEFAULT_WEB_UI_PORT = 18789;
     private static final String OPENCLAW_DEFAULT_WEB_UI_PATH = "/";
@@ -159,9 +162,12 @@ public class DashboardActivity extends Activity {
     private ImageButton mBackToAgentSelectionButton;
     private String mOpenclawLatestUpdateVersion;
     private AlertDialog mOpenclawUpdateDialog;
+    private AlertDialog mOpenclawVersionManagerDialog;
     private boolean mOpenclawManualCheckRequested;
     private boolean mUiVisible = true;
     private boolean mOpenclawWebUiOpening;
+    private boolean mOpenclawVersionActionInProgress;
+    private boolean mOpenclawVersionManagerAutoOpen;
 
     private BotDropService mBotDropService;
     private boolean mBound = false;
@@ -178,6 +184,10 @@ public class DashboardActivity extends Activity {
 
     private interface OpenclawWebUiUrlCallback {
         void onUrlResolved(String url);
+    }
+
+    private interface OpenclawVersionListCallback {
+        void onResult(List<String> versions, String errorMessage);
     }
 
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -199,6 +209,11 @@ public class DashboardActivity extends Activity {
 
             // Check for OpenClaw updates
             checkOpenclawUpdate();
+
+            if (mOpenclawVersionManagerAutoOpen) {
+                mOpenclawVersionManagerAutoOpen = false;
+                showOpenclawVersionManagerDialog();
+            }
         }
 
         @Override
@@ -305,6 +320,8 @@ public class DashboardActivity extends Activity {
         if (stored != null) {
             showUpdateBanner(stored[0], stored[1]);
         }
+
+        mOpenclawVersionManagerAutoOpen = getIntent().getBooleanExtra(EXTRA_OPENCLAW_VERSION_MANAGER, false);
     }
 
     private void openAgentSelection() {
@@ -324,6 +341,10 @@ public class DashboardActivity extends Activity {
         mStatusRefreshRunnable = null;
 
         dismissOpenclawUpdateDialog();
+        if (mOpenclawVersionManagerDialog != null && mOpenclawVersionManagerDialog.isShowing()) {
+            mOpenclawVersionManagerDialog.dismiss();
+        }
+        mOpenclawVersionManagerDialog = null;
         
         // Unbind from service
         if (mBound) {
@@ -2349,6 +2370,295 @@ public class DashboardActivity extends Activity {
 
     // --- OpenClaw update ---
 
+    private void showOpenclawVersionManagerDialog() {
+        if (mOpenclawVersionActionInProgress) {
+            return;
+        }
+        if (!mBound || mBotDropService == null) {
+            Toast.makeText(this, "Service not connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        setOpenclawVersionManagerBusy(true);
+        dismissOpenclawUpdateDialog();
+        if (mOpenclawVersionManagerDialog != null) {
+            mOpenclawVersionManagerDialog.dismiss();
+            mOpenclawVersionManagerDialog = null;
+        }
+
+        mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
+            .setTitle("OpenClaw 版本管理")
+            .setMessage("正在获取版本列表…")
+            .setCancelable(false)
+            .setNegativeButton("取消", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .create();
+        mOpenclawVersionManagerDialog.show();
+
+        fetchOpenclawVersions(new OpenclawVersionListCallback() {
+            @Override
+            public void onResult(List<String> versions, String errorMessage) {
+                if (isFinishing() || isDestroyed()) {
+                    setOpenclawVersionManagerBusy(false);
+                    return;
+                }
+                if (mOpenclawVersionManagerDialog != null) {
+                    mOpenclawVersionManagerDialog.dismiss();
+                    mOpenclawVersionManagerDialog = null;
+                }
+
+                if (versions == null || versions.isEmpty()) {
+                    showOpenclawVersionManagerErrorDialog(
+                        TextUtils.isEmpty(errorMessage) ? "未获取到可用版本列表" : errorMessage
+                    );
+                    return;
+                }
+
+                showOpenclawVersionListDialog(versions);
+            }
+        });
+    }
+
+    private void showOpenclawVersionManagerErrorDialog(String message) {
+        if (TextUtils.isEmpty(message)) {
+            message = "未能加载版本列表";
+        }
+
+        mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
+            .setTitle("OpenClaw 版本管理")
+            .setMessage(message)
+            .setNegativeButton("关闭", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setPositiveButton("重试", (d, w) -> showOpenclawVersionManagerDialog())
+            .setOnDismissListener(d -> setOpenclawVersionManagerBusy(false))
+            .create();
+        mOpenclawVersionManagerDialog.show();
+    }
+
+    private void showOpenclawVersionListDialog(List<String> versions) {
+        final List<String> normalized = normalizeOpenclawVersionList(versions);
+        if (normalized.isEmpty()) {
+            showOpenclawVersionManagerErrorDialog("未能解析到可用版本");
+            return;
+        }
+
+        String[] labels = new String[normalized.size()];
+        for (int i = 0; i < normalized.size(); i++) {
+            labels[i] = "openclaw@" + normalizeOpenclawVersionForSort(normalized.get(i));
+        }
+
+        mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
+            .setTitle("OpenClaw 版本管理")
+            .setItems(labels, (d, which) -> {
+                if (which < 0 || which >= normalized.size()) {
+                    setOpenclawVersionManagerBusy(false);
+                    return;
+                }
+                showOpenclawVersionInstallConfirm(normalized.get(which));
+            })
+            .setNegativeButton("关闭", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setOnDismissListener(d -> setOpenclawVersionManagerBusy(false))
+            .create();
+        mOpenclawVersionManagerDialog.show();
+    }
+
+    private void showOpenclawVersionInstallConfirm(String version) {
+        String installVersion = normalizeOpenclawInstallVersion(version);
+        if (TextUtils.isEmpty(installVersion)) {
+            setOpenclawVersionManagerBusy(false);
+            Toast.makeText(this, "Invalid OpenClaw version", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
+            .setTitle("安装 OpenClaw")
+            .setMessage("将安装 " + installVersion)
+            .setCancelable(false)
+            .setPositiveButton("安装", (d, w) -> {
+                setOpenclawVersionManagerBusy(true);
+                startOpenclawUpdate(installVersion);
+            })
+            .setNegativeButton("取消", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setOnDismissListener(d -> setOpenclawVersionManagerBusy(false))
+            .create();
+        mOpenclawVersionManagerDialog.show();
+    }
+
+    private void fetchOpenclawVersions(OpenclawVersionListCallback cb) {
+        if (cb == null) {
+            return;
+        }
+        String currentVersion = BotDropService.getOpenclawVersion();
+
+        mBotDropService.executeCommand(OPENCLAW_VERSIONS_COMMAND, result -> {
+            if (result == null || !result.success) {
+                String fallbackError = result == null
+                    ? "读取版本列表失败"
+                    : "读取版本列表失败（" + result.exitCode + "）";
+                cb.onResult(buildOpenclawVersionFallback(currentVersion), fallbackError);
+                return;
+            }
+
+            List<String> versions = parseOpenclawVersions(result.stdout);
+            if (versions.isEmpty()) {
+                cb.onResult(buildOpenclawVersionFallback(currentVersion), "当前无可用版本记录");
+                return;
+            }
+            cb.onResult(versions, null);
+        });
+    }
+
+    private List<String> parseOpenclawVersions(String output) {
+        List<String> versions = new ArrayList<>();
+        if (TextUtils.isEmpty(output)) {
+            return versions;
+        }
+        String trimmed = output.trim();
+        try {
+            if (trimmed.startsWith("[")) {
+                JSONArray json = new JSONArray(trimmed);
+                for (int i = 0; i < json.length(); i++) {
+                    String token = json.optString(i, null);
+                    String normalized = normalizeOpenclawVersionForSort(token);
+                    if (isStableOpenclawVersion(normalized)) {
+                        versions.add(normalized);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (!versions.isEmpty()) {
+            return sortAndLimitVersions(versions);
+        }
+
+        String[] lines = trimmed.split("\\r?\\n");
+        for (String line : lines) {
+            String normalized = normalizeOpenclawVersionForSort(line);
+            if (isStableOpenclawVersion(normalized)) {
+                versions.add(normalized);
+            }
+        }
+        return sortAndLimitVersions(versions);
+    }
+
+    private List<String> buildOpenclawVersionFallback(String currentVersion) {
+        List<String> fallback = new ArrayList<>();
+        fallback.add("latest");
+        String current = normalizeOpenclawVersionForSort(currentVersion);
+        if (!TextUtils.isEmpty(current)) {
+            fallback.add(current);
+        }
+        return sortAndLimitVersions(fallback);
+    }
+
+    private List<String> normalizeOpenclawVersionList(List<String> versions) {
+        if (versions == null || versions.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> normalized = new ArrayList<>();
+        for (String version : versions) {
+            String normalizedVersion = normalizeOpenclawVersionForSort(version);
+            if (!TextUtils.isEmpty(normalizedVersion)) {
+                normalized.add(normalizedVersion);
+            }
+        }
+        return sortAndLimitVersions(normalized);
+    }
+
+    private String normalizeOpenclawInstallVersion(String version) {
+        String normalized = normalizeOpenclawVersionForSort(version);
+        if (TextUtils.isEmpty(normalized)) {
+            return null;
+        }
+        if (TextUtils.equals("latest", normalized)) {
+            return "openclaw@latest";
+        }
+        return "openclaw@" + normalized;
+    }
+
+    private String normalizeOpenclawVersionForSort(String version) {
+        if (TextUtils.isEmpty(version)) {
+            return null;
+        }
+        String v = version.trim().replace("\"", "").replace("'", "").trim();
+        if (v.startsWith("openclaw@")) {
+            v = v.substring("openclaw@".length());
+        }
+        v = v.trim();
+        if (v.startsWith("v")) {
+            v = v.substring(1).trim();
+        }
+        if (TextUtils.isEmpty(v)) {
+            return null;
+        }
+        return v;
+    }
+
+    private boolean isStableOpenclawVersion(String version) {
+        if (TextUtils.isEmpty(version)) {
+            return false;
+        }
+        if (TextUtils.equals("latest", version)) {
+            return false;
+        }
+        if (version.contains("-") || version.contains("+")) {
+            return false;
+        }
+        try {
+            OpenClawUpdateChecker.parseSemver(version);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private List<String> sortAndLimitVersions(List<String> versions) {
+        List<String> unique = new ArrayList<>();
+        for (String version : versions) {
+            String normalized = normalizeOpenclawVersionForSort(version);
+            if (!TextUtils.isEmpty(normalized) && !unique.contains(normalized)) {
+                unique.add(normalized);
+            }
+        }
+
+        Collections.sort(unique, (a, b) -> compareOpenclawVersionsDesc(a, b));
+        if (unique.size() > OPENCLAW_VERSION_LIST_LIMIT) {
+            unique = new ArrayList<>(unique.subList(0, OPENCLAW_VERSION_LIST_LIMIT));
+        }
+        return unique;
+    }
+
+    private int compareOpenclawVersionsDesc(String a, String b) {
+        if (TextUtils.equals(a, b)) {
+            return 0;
+        }
+        if (TextUtils.equals("latest", a)) {
+            return -1;
+        }
+        if (TextUtils.equals("latest", b)) {
+            return 1;
+        }
+        try {
+            int[] av = OpenClawUpdateChecker.parseSemver(a);
+            int[] bv = OpenClawUpdateChecker.parseSemver(b);
+            for (int i = 0; i < 3; i++) {
+                if (av[i] != bv[i]) {
+                    return Integer.compare(bv[i], av[i]);
+                }
+            }
+            return 0;
+        } catch (Exception ignored) {
+            return b.compareToIgnoreCase(a);
+        }
+    }
+
+    private void setOpenclawVersionManagerBusy(boolean isBusy) {
+        mOpenclawVersionActionInProgress = isBusy;
+        if (mOpenclawCheckUpdateButton != null) {
+            mOpenclawCheckUpdateButton.setEnabled(!isBusy);
+        }
+    }
+
     private void checkOpenclawUpdate() {
         if (!mBound || mBotDropService == null) return;
 
@@ -2429,6 +2739,10 @@ public class DashboardActivity extends Activity {
         if (TextUtils.isEmpty(latestVersion) || isFinishing() || isDestroyed()) {
             return;
         }
+        if ((mOpenclawVersionManagerDialog != null && mOpenclawVersionManagerDialog.isShowing())
+            || mOpenclawVersionActionInProgress) {
+            return;
+        }
 
         if (!manualCheck && TextUtils.equals(latestVersion, mOpenclawLatestUpdateVersion)) {
             return;
@@ -2491,11 +2805,20 @@ public class DashboardActivity extends Activity {
     private void startOpenclawUpdate(String targetVersion) {
         if (TextUtils.isEmpty(targetVersion)) {
             Toast.makeText(this, "No update target version", Toast.LENGTH_SHORT).show();
+            setOpenclawVersionManagerBusy(false);
             return;
         }
 
         dismissOpenclawUpdateDialog();
-        if (!mBound || mBotDropService == null) return;
+        setOpenclawVersionManagerBusy(true);
+        if (!mBound || mBotDropService == null) {
+            setOpenclawVersionManagerBusy(false);
+            return;
+        }
+        if (mOpenclawVersionManagerDialog != null) {
+            mOpenclawVersionManagerDialog.dismiss();
+            mOpenclawVersionManagerDialog = null;
+        }
 
         // Build step-based progress dialog
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_openclaw_update, null);
@@ -2563,6 +2886,7 @@ public class DashboardActivity extends Activity {
             @Override
             public void onError(String error) {
                 progressDialog.dismiss();
+                setOpenclawVersionManagerBusy(false);
                 refreshStatus();
                 new AlertDialog.Builder(DashboardActivity.this)
                     .setTitle("Update Failed")
@@ -2593,6 +2917,7 @@ public class DashboardActivity extends Activity {
                         if (!isFinishing()) {
                             progressDialog.dismiss();
                         }
+                        setOpenclawVersionManagerBusy(false);
                         OpenClawUpdateChecker.clearUpdate(DashboardActivity.this);
                         if (mOpenclawVersionText != null) {
                             mOpenclawVersionText.setText("OpenClaw v" + newVersion);
