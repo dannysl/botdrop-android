@@ -346,9 +346,15 @@
                     android:id="@+id/discord_channel_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/botdrop_card_bg"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:paddingVertical="4dp">
+                    android:paddingVertical="10dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
 
                     <TextView
                         android:layout_width="0dp"
@@ -364,6 +370,54 @@
                         android:layout_height="wrap_content"
                         android:text="○ —"
                         android:textSize="14sp"
+                        android:textColor="@color/botdrop_secondary_text" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="›"
+                        android:textSize="16sp"
+                        android:textColor="@color/botdrop_secondary_text" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/feishu_channel_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/botdrop_card_bg"
+                    android:paddingVertical="10dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:layout_marginTop="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📨 Feishu"
+                        android:textSize="16sp"
+                        android:textColor="@color/botdrop_on_background" />
+
+                    <TextView
+                        android:id="@+id/feishu_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="○ —"
+                        android:textSize="14sp"
+                        android:textColor="@color/botdrop_secondary_text" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="›"
+                        android:textSize="16sp"
                         android:textColor="@color/botdrop_secondary_text" />
                 </LinearLayout>
         </LinearLayout>

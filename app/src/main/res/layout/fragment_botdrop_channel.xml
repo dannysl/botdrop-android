@@ -1,159 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/botdrop_background">
+    android:background="@color/botdrop_background"
+    android:orientation="vertical"
+    android:padding="16dp">
 
-    <LinearLayout
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:text="Step 3/4"
+        android:textSize="14sp"
+        android:textColor="@color/botdrop_secondary_text"
+        android:layout_marginBottom="8dp" />
 
-        <!-- Header -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Step 3/3"
-            android:textSize="14sp"
-            android:textColor="@color/botdrop_secondary_text"
-            android:layout_marginBottom="8dp" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect IM Channels"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="@color/botdrop_on_background"
+        android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Connect Telegram"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="@color/botdrop_on_background"
-            android:layout_marginBottom="24dp" />
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/channel_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:tabIndicatorColor="@color/botdrop_accent"
+        app:tabSelectedTextColor="@color/botdrop_on_background"
+        app:tabTextColor="@color/botdrop_secondary_text"
+        android:background="@drawable/botdrop_card_bg" />
 
-        <!-- Step 1: Setup Bot -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Step 1: Get Setup Help"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@color/botdrop_on_background"
-            android:layout_marginBottom="8dp" />
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/channel_viewpager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Open the setup bot to create your Telegram bot and get your User ID."
-            android:textSize="14sp"
-            android:textColor="@color/botdrop_secondary_text"
-            android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/channel_open_setup_bot"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Open @BotDropSetupBot"
-            android:textSize="16sp"
-            android:padding="16dp"
-            android:layout_marginBottom="24dp"
-            android:background="@drawable/botdrop_button_outline_bg"
-            android:textColor="@color/botdrop_accent" />
-
-        <!-- Divider -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/botdrop_surface"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Step 2: Enter Details -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Step 2: Enter Your Details"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@color/botdrop_on_background"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Bot Token -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Bot Token (from @BotFather)"
-            android:textSize="14sp"
-            android:textColor="@color/botdrop_secondary_text"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/channel_token_input"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="123456789:ABCdefGHI..."
-            android:inputType="text"
-            android:padding="14dp"
-            android:textSize="14sp"
-            android:fontFamily="monospace"
-            android:background="@drawable/botdrop_input_bg"
-            android:textColor="@color/botdrop_on_background"
-            android:textColorHint="@color/botdrop_secondary_text"
-            android:layout_marginBottom="16dp" />
-
-        <!-- User ID -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Your User ID (from @BotDropSetupBot)"
-            android:textSize="14sp"
-            android:textColor="@color/botdrop_secondary_text"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/channel_userid_input"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="123456789"
-            android:inputType="number"
-            android:padding="14dp"
-            android:textSize="14sp"
-            android:fontFamily="monospace"
-            android:background="@drawable/botdrop_input_bg"
-            android:textColor="@color/botdrop_on_background"
-            android:textColorHint="@color/botdrop_secondary_text"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Connect Button -->
-        <Button
-            android:id="@+id/channel_connect_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Connect &amp; Start"
-            android:textSize="16sp"
-            android:padding="16dp"
-            android:background="@drawable/botdrop_button_bg"
-            android:textColor="#1A1A1A"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/channel_skip_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Skip for now"
-            android:textSize="14sp"
-            android:padding="14dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/botdrop_button_outline_bg"
-            android:textColor="@color/botdrop_accent"
-            android:textStyle="bold" />
-
-        <!-- Error message -->
-        <TextView
-            android:id="@+id/channel_error_message"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:textColor="#F44336"
-            android:visibility="gone"
-            android:layout_marginTop="16dp" />
-
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>
