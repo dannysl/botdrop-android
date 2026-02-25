@@ -23,10 +23,6 @@ import com.termux.R;
 import com.termux.app.TermuxInstaller;
 import com.termux.shared.logger.Logger;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import android.text.TextUtils;
 
 import java.io.File;
 
@@ -395,95 +391,6 @@ public class BotDropLauncherActivity extends Activity {
     }
 
     private boolean hasChannelConfigured() {
-        try {
-            JSONObject config = BotDropConfig.readConfig();
-            if (!config.has("channels")) {
-                return false;
-            }
-
-            JSONObject channels = config.getJSONObject("channels");
-            JSONObject telegram = channels.optJSONObject("telegram");
-            if (isTelegramConfigured(telegram)) {
-                return true;
-            }
-
-            JSONObject discord = channels.optJSONObject("discord");
-            if (isDiscordConfigured(discord)) {
-                return true;
-            }
-
-            JSONObject feishu = channels.optJSONObject("feishu");
-            return isFeishuConfigured(feishu);
-        } catch (Exception e) {
-            Logger.logError(LOG_TAG, "Failed to check channel config: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean isTelegramConfigured(JSONObject telegram) {
-        if (telegram == null) {
-            return false;
-        }
-        if (!telegram.optBoolean("enabled", true)) {
-            return false;
-        }
-        if (TextUtils.isEmpty(telegram.optString("botToken", "").trim())) {
-            return false;
-        }
-
-        JSONArray allowFrom = telegram.optJSONArray("allowFrom");
-        if (allowFrom != null && allowFrom.length() > 0) {
-            return true;
-        }
-
-        Object ownerId = telegram.opt("ownerId");
-        return ownerId != null && !TextUtils.isEmpty(String.valueOf(ownerId).trim());
-    }
-
-    private boolean isDiscordConfigured(JSONObject discord) {
-        if (discord == null) {
-            return false;
-        }
-        if (!discord.optBoolean("enabled", true)) {
-            return false;
-        }
-        if (TextUtils.isEmpty(discord.optString("token", "").trim())) {
-            return false;
-        }
-
-        JSONObject guilds = discord.optJSONObject("guilds");
-        if (guilds == null || guilds.length() == 0) {
-            return false;
-        }
-
-        return guilds.keys().hasNext();
-    }
-
-    private boolean isFeishuConfigured(JSONObject feishu) {
-        if (feishu == null) {
-            return false;
-        }
-        if (!feishu.optBoolean("enabled", true)) {
-            return false;
-        }
-
-        JSONObject accounts = feishu.optJSONObject("accounts");
-        JSONObject mainAccount = accounts != null ? accounts.optJSONObject("main") : null;
-        if (mainAccount == null) {
-            return false;
-        }
-
-        String appId = mainAccount.optString("appId", "").trim();
-        String appSecret = mainAccount.optString("appSecret", "").trim();
-        if (appId.isEmpty() || appSecret.isEmpty()) {
-            return false;
-        }
-
-        String dmPolicy = feishu.optString("dmPolicy", "").trim();
-        JSONArray allowFrom = feishu.optJSONArray("allowFrom");
-        boolean allowlistReady = "allowlist".equals(dmPolicy) && allowFrom != null && allowFrom.length() > 0;
-        boolean pairingReady = "pairing".equals(dmPolicy) || dmPolicy.isEmpty();
-
-        return allowlistReady || pairingReady;
+        return ChannelSetupHelper.hasAnyChannelConfigured();
     }
 }

@@ -117,13 +117,6 @@ public class ChannelConfigMeta {
         return ownerId.matches("^\\d+$");
     }
 
-    public boolean isFeishuUserIdValid(String userId) {
-        if (!PLATFORM_FEISHU.equals(platform)) {
-            return true;
-        }
-        return true;
-    }
-
     public boolean isDiscordGuildIdValid(String guildId) {
         if (!PLATFORM_DISCORD.equals(platform)) {
             return true;

@@ -34,7 +34,7 @@ public class ChannelConfigMetaTest {
         assertFalse(meta.isTokenValid(""));
         assertFalse(meta.isOwnerValid(""));
         assertTrue(meta.isOwnerValid("feishu-app-secret"));
-        assertTrue(meta.isFeishuUserIdValid(""));
-        assertTrue(meta.isFeishuUserIdValid("ou_xxx"));
+        assertTrue(meta.isDiscordGuildIdValid(""));  // not discord, always true
+        assertTrue(meta.isDiscordChannelIdValid("")); // not discord, always true
     }
 }
