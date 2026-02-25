@@ -89,7 +89,8 @@ public class ChannelConfigMeta {
             "app-id",
             "App Secret",
             "app-secret",
-            "Create a Feishu app and paste the App ID and App Secret. Leave User Open ID blank for pairing mode; fill it later to use allowlist.",
+            "Create a Feishu app and bot, then fill in App ID and App Secret below. "
+                + "See <a href=\"https://docs.openclaw.ai/channels/feishu\">setup guide</a> for details.",
             true
         );
     }

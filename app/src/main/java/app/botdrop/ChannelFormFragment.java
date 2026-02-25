@@ -143,14 +143,16 @@ public abstract class ChannelFormFragment extends Fragment {
                 );
             }
             if (mFeishuUserIdLabel != null) {
-                mFeishuUserIdLabel.setText("User Open ID (Optional)");
+                mFeishuUserIdLabel.setText("Feishu User ID (for the next step)");
             }
             if (mFeishuUserIdInput != null) {
-                mFeishuUserIdInput.setHint("Optional User Open ID");
+                mFeishuUserIdInput.setHint("ou_xxx...");
             }
             if (mFeishuUserIdHelp != null) {
                 mFeishuUserIdHelp.setText(
-                    "Leave this empty for pairing mode. Chat with the bot once to get your open_id."
+                    "Step 1: Tap Connect & Start with only App ID + App Secret.\n"
+                        + "Step 2: Message the setup bot after connect to get your User ID.\n"
+                        + "Step 3: Paste the user id here, then tap Connect & Start again."
                 );
             }
             if (mDiscordGuildRow != null) {
@@ -176,7 +178,8 @@ public abstract class ChannelFormFragment extends Fragment {
                 mDiscordChannelInput.setHint("Target channel ID");
             }
             if (mSetupHelpText != null && mMeta.setupHelpText != null) {
-                mSetupHelpText.setText(mMeta.setupHelpText);
+                mSetupHelpText.setText(android.text.Html.fromHtml(mMeta.setupHelpText, android.text.Html.FROM_HTML_MODE_COMPACT));
+                mSetupHelpText.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
             }
         }
 
