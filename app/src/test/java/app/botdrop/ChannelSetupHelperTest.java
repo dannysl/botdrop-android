@@ -2,6 +2,7 @@ package app.botdrop;
 
 import android.util.Base64;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -345,5 +346,154 @@ public class ChannelSetupHelperTest {
         assertEquals("telegram", data.platform);
         assertEquals("test-token", data.botToken);
         assertEquals("test-owner", data.ownerId);
+    }
+
+    // ── Channel detection tests ─────────────────────────────────────
+
+    @Test
+    public void testIsTelegramConfigured_null_returnsFalse() {
+        assertFalse(ChannelSetupHelper.isTelegramConfigured(null));
+    }
+
+    @Test
+    public void testIsTelegramConfigured_withAllowFrom() throws JSONException {
+        JSONObject tg = new JSONObject();
+        tg.put("botToken", "123:ABC");
+        tg.put("allowFrom", new JSONArray().put("12345"));
+        assertTrue(ChannelSetupHelper.isTelegramConfigured(tg));
+    }
+
+    @Test
+    public void testIsTelegramConfigured_withOwnerId() throws JSONException {
+        JSONObject tg = new JSONObject();
+        tg.put("botToken", "123:ABC");
+        tg.put("ownerId", "12345");
+        assertTrue(ChannelSetupHelper.isTelegramConfigured(tg));
+    }
+
+    @Test
+    public void testIsTelegramConfigured_noTokenFails() throws JSONException {
+        JSONObject tg = new JSONObject();
+        tg.put("allowFrom", new JSONArray().put("12345"));
+        assertFalse(ChannelSetupHelper.isTelegramConfigured(tg));
+    }
+
+    @Test
+    public void testIsTelegramConfigured_disabledFails() throws JSONException {
+        JSONObject tg = new JSONObject();
+        tg.put("enabled", false);
+        tg.put("botToken", "123:ABC");
+        tg.put("allowFrom", new JSONArray().put("12345"));
+        assertFalse(ChannelSetupHelper.isTelegramConfigured(tg));
+    }
+
+    @Test
+    public void testIsTelegramConfigured_noOwnerNoAllowFrom() throws JSONException {
+        JSONObject tg = new JSONObject();
+        tg.put("botToken", "123:ABC");
+        assertFalse(ChannelSetupHelper.isTelegramConfigured(tg));
+    }
+
+    @Test
+    public void testIsDiscordConfigured_null_returnsFalse() {
+        assertFalse(ChannelSetupHelper.isDiscordConfigured(null));
+    }
+
+    @Test
+    public void testIsDiscordConfigured_withGuildAndChannel() throws JSONException {
+        JSONObject discord = new JSONObject();
+        discord.put("token", "bot-token");
+        JSONObject channel = new JSONObject().put("allow", true);
+        JSONObject guildChannels = new JSONObject().put("chan1", channel);
+        JSONObject guild = new JSONObject().put("channels", guildChannels);
+        JSONObject guilds = new JSONObject().put("guild1", guild);
+        discord.put("guilds", guilds);
+        assertTrue(ChannelSetupHelper.isDiscordConfigured(discord));
+    }
+
+    @Test
+    public void testIsDiscordConfigured_noTokenFails() throws JSONException {
+        JSONObject discord = new JSONObject();
+        JSONObject guild = new JSONObject().put("channels", new JSONObject().put("c", new JSONObject()));
+        discord.put("guilds", new JSONObject().put("g", guild));
+        assertFalse(ChannelSetupHelper.isDiscordConfigured(discord));
+    }
+
+    @Test
+    public void testIsDiscordConfigured_emptyGuildsFails() throws JSONException {
+        JSONObject discord = new JSONObject();
+        discord.put("token", "bot-token");
+        discord.put("guilds", new JSONObject());
+        assertFalse(ChannelSetupHelper.isDiscordConfigured(discord));
+    }
+
+    @Test
+    public void testIsDiscordConfigured_guildWithNoChannelsFails() throws JSONException {
+        JSONObject discord = new JSONObject();
+        discord.put("token", "bot-token");
+        JSONObject guild = new JSONObject(); // no "channels" key
+        discord.put("guilds", new JSONObject().put("g1", guild));
+        assertFalse(ChannelSetupHelper.isDiscordConfigured(discord));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_null_returnsFalse() {
+        assertFalse(ChannelSetupHelper.isFeishuConfigured(null));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_pairingMode() throws JSONException {
+        JSONObject feishu = new JSONObject();
+        feishu.put("dmPolicy", "pairing");
+        JSONObject main = new JSONObject();
+        main.put("appId", "app1");
+        main.put("appSecret", "secret1");
+        feishu.put("accounts", new JSONObject().put("main", main));
+        assertTrue(ChannelSetupHelper.isFeishuConfigured(feishu));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_allowlistMode() throws JSONException {
+        JSONObject feishu = new JSONObject();
+        feishu.put("dmPolicy", "allowlist");
+        feishu.put("allowFrom", new JSONArray().put("ou_xxx"));
+        JSONObject main = new JSONObject();
+        main.put("appId", "app1");
+        main.put("appSecret", "secret1");
+        feishu.put("accounts", new JSONObject().put("main", main));
+        assertTrue(ChannelSetupHelper.isFeishuConfigured(feishu));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_allowlistNoUserFails() throws JSONException {
+        JSONObject feishu = new JSONObject();
+        feishu.put("dmPolicy", "allowlist");
+        // no allowFrom
+        JSONObject main = new JSONObject();
+        main.put("appId", "app1");
+        main.put("appSecret", "secret1");
+        feishu.put("accounts", new JSONObject().put("main", main));
+        assertFalse(ChannelSetupHelper.isFeishuConfigured(feishu));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_noAppIdFails() throws JSONException {
+        JSONObject feishu = new JSONObject();
+        feishu.put("dmPolicy", "pairing");
+        JSONObject main = new JSONObject();
+        main.put("appSecret", "secret1");
+        feishu.put("accounts", new JSONObject().put("main", main));
+        assertFalse(ChannelSetupHelper.isFeishuConfigured(feishu));
+    }
+
+    @Test
+    public void testIsFeishuConfigured_emptyDmPolicyDefaultsPairing() throws JSONException {
+        JSONObject feishu = new JSONObject();
+        // no dmPolicy → defaults to empty string which counts as pairing-ready
+        JSONObject main = new JSONObject();
+        main.put("appId", "app1");
+        main.put("appSecret", "secret1");
+        feishu.put("accounts", new JSONObject().put("main", main));
+        assertTrue(ChannelSetupHelper.isFeishuConfigured(feishu));
     }
 }

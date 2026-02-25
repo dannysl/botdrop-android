@@ -109,7 +109,7 @@
             android:gravity="center"
             android:background="@drawable/botdrop_button_red_outline_bg"
             android:textColor="@color/botdrop_accent"
-            android:contentDescription="OpenClaw 版本管理"
+            android:contentDescription="OpenClaw version manager"
             android:layout_gravity="end|top"
             android:layout_marginTop="6dp"
             android:layout_marginEnd="6dp"

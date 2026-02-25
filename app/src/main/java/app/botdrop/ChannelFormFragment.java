@@ -1,5 +1,6 @@
 package app.botdrop;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -60,9 +61,10 @@ public abstract class ChannelFormFragment extends Fragment {
 
     private BotDropService mService;
     private boolean mBound;
+    private boolean mServiceBound;
     private boolean mHasExistingConfig;
 
-    private ServiceConnection mConnection = new ServiceConnection() {
+    private final ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
@@ -74,6 +76,7 @@ public abstract class ChannelFormFragment extends Fragment {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             mBound = false;
+            mService = null;
             Logger.logDebug(LOG_TAG, "Service disconnected");
         }
     };
@@ -136,7 +139,7 @@ public abstract class ChannelFormFragment extends Fragment {
             }
             if (mFeishuUserIdRow != null) {
                 mFeishuUserIdRow.setVisibility(
-                    CHANNEL_FEISHU.equals(mMeta.platform) ? View.VISIBLE : View.GONE
+                    ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform) ? View.VISIBLE : View.GONE
                 );
             }
             if (mFeishuUserIdLabel != null) {
@@ -152,7 +155,7 @@ public abstract class ChannelFormFragment extends Fragment {
             }
             if (mDiscordGuildRow != null) {
                 mDiscordGuildRow.setVisibility(
-                    CHANNEL_DISCORD.equals(mMeta.platform) ? View.VISIBLE : View.GONE
+                    ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform) ? View.VISIBLE : View.GONE
                 );
             }
             if (mDiscordGuildLabel != null) {
@@ -163,7 +166,7 @@ public abstract class ChannelFormFragment extends Fragment {
             }
             if (mDiscordChannelRow != null) {
                 mDiscordChannelRow.setVisibility(
-                    CHANNEL_DISCORD.equals(mMeta.platform) ? View.VISIBLE : View.GONE
+                    ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform) ? View.VISIBLE : View.GONE
                 );
             }
             if (mDiscordChannelLabel != null) {
@@ -188,20 +191,32 @@ public abstract class ChannelFormFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        Intent intent = new Intent(requireActivity(), BotDropService.class);
-        requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        Activity activity = getActivity();
+        if (activity == null) {
+            return;
+        }
+        Intent intent = new Intent(activity, BotDropService.class);
+        boolean bound = activity.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        if (bound) {
+            mServiceBound = true;
+        }
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        if (mBound) {
-            try {
-                requireActivity().unbindService(mConnection);
-            } catch (IllegalArgumentException e) {
-                Logger.logDebug(LOG_TAG, "Service was already unbound");
+        if (mServiceBound) {
+            Activity activity = getActivity();
+            if (activity != null) {
+                try {
+                    activity.unbindService(mConnection);
+                } catch (IllegalArgumentException e) {
+                    Logger.logDebug(LOG_TAG, "Service was already unbound");
+                }
             }
+            mServiceBound = false;
             mBound = false;
+            mService = null;
         }
     }
 
@@ -227,9 +242,9 @@ public abstract class ChannelFormFragment extends Fragment {
         String channelId = mDiscordChannelInput != null ? mDiscordChannelInput.getText().toString().trim() : "";
 
         if (!mMeta.isTokenValid(token)) {
-            if (CHANNEL_TELEGRAM.equals(mMeta.platform)) {
+            if (ChannelConfigMeta.PLATFORM_TELEGRAM.equals(mMeta.platform)) {
                 showError("Please enter a valid bot token");
-            } else if (CHANNEL_FEISHU.equals(mMeta.platform)) {
+            } else if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 showError("Please enter your App ID");
             } else {
                 showError("Please enter your token");
@@ -238,7 +253,7 @@ public abstract class ChannelFormFragment extends Fragment {
         }
 
         if (!mMeta.isOwnerValid(ownerId)) {
-            if (CHANNEL_FEISHU.equals(mMeta.platform)) {
+            if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 showError("Please enter a valid App Secret");
             } else {
                 showError("Please enter a valid owner ID");
@@ -246,7 +261,7 @@ public abstract class ChannelFormFragment extends Fragment {
             return;
         }
 
-        if (CHANNEL_DISCORD.equals(mMeta.platform)) {
+        if (ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform)) {
             if (!mMeta.isDiscordGuildIdValid(guildId)) {
                 showError("Please enter a valid guild ID");
                 return;
@@ -262,7 +277,7 @@ public abstract class ChannelFormFragment extends Fragment {
         mConnectButton.setText("Connecting...");
 
         boolean success;
-        if (CHANNEL_DISCORD.equals(mMeta.platform)) {
+        if (ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform)) {
             success = ChannelSetupHelper.writeChannelConfig(
                 mMeta.platform,
                 token,
@@ -270,7 +285,7 @@ public abstract class ChannelFormFragment extends Fragment {
                 guildId,
                 channelId
             );
-        } else if (CHANNEL_FEISHU.equals(mMeta.platform)) {
+        } else if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
             success = ChannelSetupHelper.writeFeishuChannelConfig(
                 token,
                 ownerId,
@@ -289,15 +304,18 @@ public abstract class ChannelFormFragment extends Fragment {
             return;
         }
 
-        if (CHANNEL_TELEGRAM.equals(mMeta.platform)) {
+        if (ChannelConfigMeta.PLATFORM_TELEGRAM.equals(mMeta.platform)) {
             try {
-                ConfigTemplate template = ConfigTemplateCache.loadTemplate(requireContext());
-                if (template == null) {
-                    template = new ConfigTemplate();
+                Context ctx = getContext();
+                if (ctx != null) {
+                    ConfigTemplate template = ConfigTemplateCache.loadTemplate(ctx);
+                    if (template == null) {
+                        template = new ConfigTemplate();
+                    }
+                    template.tgBotToken = token;
+                    template.tgUserId = ownerId;
+                    ConfigTemplateCache.saveTemplate(ctx, template);
                 }
-                template.tgBotToken = token;
-                template.tgUserId = ownerId;
-                ConfigTemplateCache.saveTemplate(requireContext(), template);
             } catch (Exception e) {
                 Logger.logError(LOG_TAG, "Failed to save template: " + e.getMessage());
             }
@@ -323,7 +341,7 @@ public abstract class ChannelFormFragment extends Fragment {
             String token;
             String owner;
             String feishuUserId = null;
-            if (CHANNEL_FEISHU.equals(mMeta.platform)) {
+            if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 token = extractFeishuAppIdFromChannelConfig(channelConfig);
                 owner = extractFeishuAppSecretFromChannelConfig(channelConfig);
                 feishuUserId = extractFeishuUserIdFromChannelConfig(channelConfig);
@@ -348,11 +366,11 @@ public abstract class ChannelFormFragment extends Fragment {
                     if (guildConfig == null) {
                         continue;
                     }
-                    channels = guildConfig.optJSONObject("channels");
-                    if (channels == null || channels.length() == 0) {
+                    JSONObject guildChannels = guildConfig.optJSONObject("channels");
+                    if (guildChannels == null || guildChannels.length() == 0) {
                         continue;
                     }
-                    Iterator<String> channelIterator = channels.keys();
+                    Iterator<String> channelIterator = guildChannels.keys();
                     if (channelIterator.hasNext()) {
                         guildId = guild;
                         channelId = channelIterator.next();
@@ -360,7 +378,7 @@ public abstract class ChannelFormFragment extends Fragment {
                     }
                 }
             }
-            if (CHANNEL_DISCORD.equals(mMeta.platform) && TextUtils.isEmpty(guildId)) {
+            if (ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform) && TextUtils.isEmpty(guildId)) {
                 return;
             }
 
@@ -382,11 +400,11 @@ public abstract class ChannelFormFragment extends Fragment {
                 mDiscordChannelInput.setText(channelId.trim());
             }
 
-            if (CHANNEL_DISCORD.equals(mMeta.platform)) {
+            if (ChannelConfigMeta.PLATFORM_DISCORD.equals(mMeta.platform)) {
                 mHasExistingConfig = !TextUtils.isEmpty(token)
                     && !TextUtils.isEmpty(guildId)
                     && !TextUtils.isEmpty(channelId);
-            } else if (CHANNEL_FEISHU.equals(mMeta.platform)) {
+            } else if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 mHasExistingConfig = !TextUtils.isEmpty(token)
                     && !TextUtils.isEmpty(owner);
                 String dmPolicy = channelConfig.optString("dmPolicy", "").trim();
@@ -404,11 +422,6 @@ public abstract class ChannelFormFragment extends Fragment {
         Object owner = channelConfig.opt("ownerId");
         if (owner != null) {
             return String.valueOf(owner);
-        }
-
-        Object appSecret = channelConfig.opt("appSecret");
-        if (appSecret != null) {
-            return String.valueOf(appSecret);
         }
 
         Object ownerFromAllowFrom = channelConfig.opt("allowFrom");
@@ -462,8 +475,7 @@ public abstract class ChannelFormFragment extends Fragment {
 
         Object allowFrom = channelConfig.opt("allowFrom");
         if (allowFrom instanceof String) {
-            String userId = (String) allowFrom;
-            return userId != null ? userId : "";
+            return (String) allowFrom;
         }
         if (allowFrom instanceof JSONArray) {
             JSONArray ids = (JSONArray) allowFrom;
@@ -501,18 +513,25 @@ public abstract class ChannelFormFragment extends Fragment {
                 return;
             }
 
-            requireActivity().runOnUiThread(() -> {
+            Activity activity = getActivity();
+            if (activity == null || activity.isFinishing()) {
+                return;
+            }
+            activity.runOnUiThread(() -> {
                 if (!isAdded() || getActivity() == null || getActivity().isFinishing()) {
                     return;
                 }
 
                 if (result.success) {
                     Logger.logInfo(LOG_TAG, "Gateway started successfully");
-                    Toast.makeText(requireContext(), "Connected! Gateway is starting...", Toast.LENGTH_LONG).show();
+                    Context ctx = getContext();
+                    if (ctx != null) {
+                        Toast.makeText(ctx, "Connected! Gateway is starting...", Toast.LENGTH_LONG).show();
+                    }
 
-                    SetupActivity activity = (SetupActivity) getActivity();
-                    if (activity != null && !activity.isFinishing()) {
-                        activity.goToNextStep();
+                    SetupActivity setupActivity = (SetupActivity) getActivity();
+                    if (setupActivity != null && !setupActivity.isFinishing()) {
+                        setupActivity.goToNextStep();
                     }
                 } else {
                     Logger.logError(LOG_TAG, "Failed to start gateway: " + result.stderr);
@@ -535,7 +554,11 @@ public abstract class ChannelFormFragment extends Fragment {
             return;
         }
         String platformLabel = mMeta == null ? "This channel" : mMeta.title;
-        new AlertDialog.Builder(requireContext())
+        Context ctx = getContext();
+        if (ctx == null) {
+            return;
+        }
+        new AlertDialog.Builder(ctx)
             .setTitle("Skip " + platformLabel + " setup?")
             .setMessage("If you skip now, " + platformLabel + " will remain unconfigured. "
                 + "You can configure channels later from the OpenClaw Web UI.")
@@ -567,10 +590,6 @@ public abstract class ChannelFormFragment extends Fragment {
         mConnectButton.setEnabled(true);
         mConnectButton.setText("Connect & Start");
     }
-
-    private static final String CHANNEL_TELEGRAM = "telegram";
-    private static final String CHANNEL_DISCORD = "discord";
-    private static final String CHANNEL_FEISHU = "feishu";
 
     protected abstract String getPlatformId();
     protected abstract int getLayoutResId();
