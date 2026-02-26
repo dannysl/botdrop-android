@@ -525,7 +525,7 @@ public class BotDropService extends Service {
                     "export TMPDIR=$PREFIX/tmp\n" +
                     "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
                     "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
-                    "npm install -g " + safePackage + " --ignore-scripts --force 2>&1\n";
+                    OpenclawVersionUtils.buildNpmInstallCommand(safePackage) + " 2>&1\n";
                 CommandResult npmResult = executeCommandSync(npmCmd, 300);
                 if (!npmResult.success) {
                     String tail = extractTail(npmResult.stdout, 15);
