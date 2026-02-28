@@ -356,5 +356,10 @@
     <string name="botdrop_provider_name">提供商名称</string>
     <string name="botdrop_auth_method_hint">认证方式提示</string>
     <string name="botdrop_select_provider_choose_model">选择提供商并选择模型</string>
+    <string name="botdrop_update_title">BotDrop 更新</string>
+    <string name="botdrop_new_version_detected">检测到新版本：v%1$s</string>
+    <string name="botdrop_new_version_detected_detail">检测到新版本：v%1$s\n\n点击查看详情</string>
+    <string name="botdrop_update_channel_name">BotDrop 更新通知</string>
+    <string name="botdrop_update_channel_description">当有新版本 BotDrop 可用时通知。</string>
 
 </resources>

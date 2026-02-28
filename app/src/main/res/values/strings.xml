@@ -356,5 +356,10 @@
     <string name="botdrop_provider_name">Provider Name</string>
     <string name="botdrop_auth_method_hint">Auth method hint</string>
     <string name="botdrop_select_provider_choose_model">Select provider and choose model</string>
+    <string name="botdrop_update_title">BotDrop Update</string>
+    <string name="botdrop_new_version_detected">New version detected: v%1$s</string>
+    <string name="botdrop_new_version_detected_detail">New version detected: v%1$s\n\nTap for details</string>
+    <string name="botdrop_update_channel_name">BotDrop Updates</string>
+    <string name="botdrop_update_channel_description">Notifies when a new BotDrop version is available.</string>
 
 </resources>
