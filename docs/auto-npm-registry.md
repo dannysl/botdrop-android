@@ -8,6 +8,7 @@ Goal: improve npm install success in China Mainland networks by automatically se
 - If `BOTDROP_NPM_REGISTRY` is set, it wins (explicit override).
 - Otherwise BotDrop detects **current network** via default gateway IP (`ip route`), and caches a chosen registry for that gateway for 24h.
 - The selection first probes registry reachability (2s timeout): `registry.npmjs.org` vs `registry.npmmirror.com` and picks the working one.
+- When cache exists for current gateway, BotDrop re-validates that registry; stale cache is automatically re-resolved.
 - If probes are inconclusive, it falls back to a lightweight GeoIP heuristic (`ipinfo.io/country`).
 
 ## Registries
@@ -21,5 +22,5 @@ Goal: improve npm install success in China Mainland networks by automatically se
 
 ## Notes
 
-- This is best-effort. If the probe fails, we keep default registry.
+- This is best-effort. If all probes and GeoIP fallback are inconclusive, it falls back to default registry.
 - We also export `NPM_CONFIG_REGISTRY` to make npm consistently use the chosen registry.

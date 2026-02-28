@@ -473,8 +473,7 @@ public final class TermuxInstaller {
                 "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
                 "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
                 "\n" +
-                OpenclawVersionUtils.buildNpmCommandPrefix() +
-                "NPM_OUTPUT=$(npm install -g " + openclawVersion + " --ignore-scripts --force 2>&1)\n" +
+                "NPM_OUTPUT=$(" + OpenclawVersionUtils.buildNpmInstallCommand(openclawVersion) + " 2>&1)\n" +
                 "NPM_EXIT=$?\n" +
                 "if [ $NPM_EXIT -eq 0 ]; then\n" +
                 "    # Create a stable openclaw wrapper (npm-generated shim can be broken on Android/proot)\n" +

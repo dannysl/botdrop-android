@@ -89,7 +89,7 @@ public final class OpenclawVersionUtils {
     }
 
     public static String buildNpmInstallCommand(String packageSpec) {
-        String safePackage = TextUtils.isEmpty(packageSpec) ? "openclaw@latest" : packageSpec;
+        String safePackage = shellQuoteSingle(TextUtils.isEmpty(packageSpec) ? "openclaw@latest" : packageSpec);
         return buildNpmCommandPrefix() + "npm install -g " + safePackage + " --ignore-scripts --force";
     }
 
@@ -222,22 +222,31 @@ public final class OpenclawVersionUtils {
 
     private static String buildNpmRegistryResolverFunction() {
         return "botdrop_resolve_npm_registry() {\n"
-            + "  local default_registry=\"" + DEFAULT_NPM_REGISTRY + "\"\n"
-            + "  local cn_registry=\"" + CN_NPM_REGISTRY + "\"\n"
-            + "  local cache_file=\"$HOME/.botdrop_npm_registry_cache\"\n"
-            + "  local cache_ttl_seconds=" + NPM_REGISTRY_CACHE_TTL_SECONDS + "\n"
-            + "  local gateway=\"\"\n"
-            + "  local resolved=\"\"\n"
-            + "  local country=\"\"\n"
-            + "  local npmjs_probe=\"\"\n"
-            + "  local npmmirror_probe=\"\"\n"
-            + "  local now=\"$(date +%s 2>/dev/null || echo 0)\"\n"
-            + "  local cache_gateway=\"\"\n"
-            + "  local cache_expiry=\"\"\n"
-            + "  local cache_registry=\"\"\n"
+            + "  default_registry=\"" + DEFAULT_NPM_REGISTRY + "\"\n"
+            + "  cn_registry=\"" + CN_NPM_REGISTRY + "\"\n"
+            + "  cache_file=\"$HOME/.botdrop_npm_registry_cache\"\n"
+            + "  cache_ttl_seconds=" + NPM_REGISTRY_CACHE_TTL_SECONDS + "\n"
+            + "  gateway=\"\"\n"
+            + "  resolved=\"\"\n"
+            + "  country=\"\"\n"
+            + "  npmjs_probe=\"\"\n"
+            + "  npmmirror_probe=\"\"\n"
+            + "  resolved_probe=\"\"\n"
+            + "  cache_mid=0\n"
+            + "  now=\"$(date +%s 2>/dev/null || echo 0)\"\n"
+            + "  cache_gateway=\"\"\n"
+            + "  cache_expiry=\"\"\n"
+            + "  cache_registry=\"\"\n"
             + "\n"
             + "  if [ -n \"$BOTDROP_NPM_REGISTRY\" ]; then\n"
-            + "    echo \"$BOTDROP_NPM_REGISTRY\"\n"
+            + "    case \"$BOTDROP_NPM_REGISTRY\" in\n"
+            + "      http://*|https://*)\n"
+            + "        echo \"$BOTDROP_NPM_REGISTRY\"\n"
+            + "        ;;\n"
+            + "      *)\n"
+            + "        echo \"$default_registry\"\n"
+            + "        ;;\n"
+            + "    esac\n"
             + "    return 0\n"
             + "  fi\n"
             + "\n"
@@ -252,6 +261,13 @@ public final class OpenclawVersionUtils {
             + "    cache_gateway=\"$(awk -F= '/^gateway=/{print $2; exit}' \"$cache_file\")\"\n"
             + "    cache_expiry=\"$(awk -F= '/^expiry=/{print $2; exit}' \"$cache_file\")\"\n"
             + "    cache_registry=\"$(awk -F= '/^registry=/{print $2; exit}' \"$cache_file\")\"\n"
+            + "    case \"$cache_registry\" in\n"
+            + "      \"$default_registry\"|\"$cn_registry\")\n"
+            + "        ;;\n"
+            + "      *)\n"
+            + "        cache_registry=\"\"\n"
+            + "        ;;\n"
+            + "    esac\n"
             + "    case \"$cache_expiry\" in\n"
             + "      ''|*[!0-9]*)\n"
             + "        cache_expiry=0\n"
@@ -263,16 +279,33 @@ public final class OpenclawVersionUtils {
             + "    fi\n"
             + "  fi\n"
             + "\n"
+            + "  if [ -n \"$resolved\" ]; then\n"
+            + "    # Re-validate only when cache is past half its TTL to avoid extra latency on fresh entries.\n"
+            + "    cache_mid=$((cache_expiry - cache_ttl_seconds / 2))\n"
+            + "    if [ \"$now\" -ge \"$cache_mid\" ]; then\n"
+            + "      if command -v curl >/dev/null 2>&1; then\n"
+            + "        resolved_probe=\"$(curl -m 2 -o /dev/null -s -w '%{http_code}' \"${resolved}openclaw\" 2>/dev/null)\"\n"
+            + "      elif command -v wget >/dev/null 2>&1; then\n"
+            + "        wget -q -T 2 -t 1 --spider \"${resolved}openclaw\" >/dev/null 2>&1 && resolved_probe=200\n"
+            + "      fi\n"
+            + "      if [ \"$resolved_probe\" != \"200\" ]; then\n"
+            + "        resolved=\"\"\n"
+            + "        resolved_probe=\"\"\n"
+            + "        cache_registry=\"\"\n"
+            + "      fi\n"
+            + "    fi\n"
+            + "  fi\n"
+            + "\n"
             + "  if [ -z \"$resolved\" ]; then\n"
             + "    # Prefer direct registry reachability probing over GeoIP.\n"
             + "    # - CN networks often fail/slow on npmjs but work on npmmirror.\n"
             + "    # - This avoids relying on third-party GeoIP endpoints.\n"
             + "    if command -v curl >/dev/null 2>&1; then\n"
-            + "      npmjs_probe=\"$(curl -m 2 -o /dev/null -s -w '%{http_code}' ${default_registry}openclaw 2>/dev/null)\"\n"
-            + "      npmmirror_probe=\"$(curl -m 2 -o /dev/null -s -w '%{http_code}' ${cn_registry}openclaw 2>/dev/null)\"\n"
+            + "      npmjs_probe=\"$(curl -m 2 -o /dev/null -s -w '%{http_code}' \"${default_registry}openclaw\" 2>/dev/null)\"\n"
+            + "      npmmirror_probe=\"$(curl -m 2 -o /dev/null -s -w '%{http_code}' \"${cn_registry}openclaw\" 2>/dev/null)\"\n"
             + "    elif command -v wget >/dev/null 2>&1; then\n"
-            + "      wget -q -T 2 -t 1 --spider ${default_registry}openclaw >/dev/null 2>&1 && npmjs_probe=200\n"
-            + "      wget -q -T 2 -t 1 --spider ${cn_registry}openclaw >/dev/null 2>&1 && npmmirror_probe=200\n"
+            + "      wget -q -T 2 -t 1 --spider \"${default_registry}openclaw\" >/dev/null 2>&1 && npmjs_probe=200\n"
+            + "      wget -q -T 2 -t 1 --spider \"${cn_registry}openclaw\" >/dev/null 2>&1 && npmmirror_probe=200\n"
             + "    fi\n"
             + "\n"
             + "    if [ \"$npmmirror_probe\" = \"200\" ] && [ \"$npmjs_probe\" != \"200\" ]; then\n"
@@ -308,5 +341,12 @@ public final class OpenclawVersionUtils {
             + "  printf \"gateway=%s\\nregistry=%s\\n\" \"$gateway\" \"$resolved\" > \"$HOME/.botdrop_last_npm_registry\"\n"
             + "  echo \"$resolved\"\n"
             + "}\n";
+    }
+
+    private static String shellQuoteSingle(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return "''";
+        }
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 }
