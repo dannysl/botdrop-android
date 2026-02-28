@@ -7,7 +7,6 @@ import android.os.IBinder;
 import android.os.Parcel;
 
 import com.termux.shared.logger.Logger;
-import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -17,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -218,19 +219,17 @@ public class ShellService extends Service {
     }
 
     private String[] getShizukuEnv() {
-        String systemPath = System.getenv("PATH");
-        if (systemPath == null || systemPath.isEmpty()) {
-            systemPath = "/system/bin:/system/xbin:/vendor/bin:/sbin:/vendor/sbin";
+        Map<String, String> env = new LinkedHashMap<>(System.getenv());
+
+        String[] envArray = new String[env.size()];
+        int i = 0;
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            envArray[i++] = key + "=" + (value == null ? "" : value);
         }
 
-        return new String[]{
-            "PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH,
-            "HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH,
-            "PATH=" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":" + systemPath,
-            "TMPDIR=" + TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH,
-            "SSL_CERT_FILE=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem",
-            "NODE_OPTIONS=--dns-result-order=ipv4first"
-        };
+        return envArray;
     }
 
     private String[] selectCommand(String command) {
@@ -239,14 +238,7 @@ public class ShellService extends Service {
     }
 
     private String ensureTermuxEnvironment(String command) {
-        String safeCommand = command == null ? "" : command;
-        return "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "; " +
-            "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "; " +
-            "export PATH=" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":$PATH; " +
-            "export TMPDIR=" + TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "; " +
-            "export SSL_CERT_FILE=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem; " +
-            "export NODE_OPTIONS=--dns-result-order=ipv4first; " +
-            safeCommand;
+        return command == null ? "" : command;
     }
 
     private Callable<String> readProcessOutput(InputStream inputStream) {

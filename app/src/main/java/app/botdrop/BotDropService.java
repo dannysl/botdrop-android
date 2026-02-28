@@ -290,6 +290,8 @@ public class BotDropService extends Service {
             pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
             // Set SSL_CERT_FILE for Node.js fetch to find CA certificates
             pb.environment().put("SSL_CERT_FILE", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem");
+            // Ensure Node.js can resolve globally installed native addons (for sharp, etc.)
+            pb.environment().put("NODE_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules");
             // Prefer IPv4 first; avoids long IPv6 connect stalls in Android/proot environments.
             pb.environment().put("NODE_OPTIONS", "--dns-result-order=ipv4first");
 
@@ -427,6 +429,7 @@ public class BotDropService extends Service {
                 pb.environment().put("PATH", TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + ":" + System.getenv("PATH"));
                 pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
                 pb.environment().put("SSL_CERT_FILE", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem");
+                pb.environment().put("NODE_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules");
                 pb.redirectErrorStream(true);
 
                 Logger.logInfo(LOG_TAG, "Starting install via " + INSTALL_SCRIPT);
@@ -572,6 +575,7 @@ public class BotDropService extends Service {
                "export PATH=$PREFIX/bin:$PATH && " +
                "export TMPDIR=$PREFIX/tmp && " +
                "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem && " +
+               "export NODE_PATH=$PREFIX/lib/node_modules && " +
                "export NODE_OPTIONS=--dns-result-order=ipv4first && " +
                command;
     }
@@ -587,6 +591,7 @@ public class BotDropService extends Service {
                "export PATH=$PREFIX/bin:$PATH && " +
                "export TMPDIR=$PREFIX/tmp && " +
                "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem && " +
+               "export NODE_PATH=$PREFIX/lib/node_modules && " +
                "export NODE_OPTIONS=--dns-result-order=ipv4first && " +
                // `openclaw` is installed as a wrapper that already runs under `termux-chroot`.
                // Avoid nesting proot/termux-chroot, which can stall gateway startup for minutes.
@@ -946,9 +951,11 @@ public class BotDropService extends Service {
             "export PATH=$PREFIX/bin:$PATH\n" +
             "export TMPDIR=$PREFIX/tmp\n" +
             "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
+            "export NODE_PATH=$PREFIX/lib/node_modules\n" +
             "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
             "echo \"=== Environment before chroot ===\" >&2\n" +
             "echo \"SSL_CERT_FILE=$SSL_CERT_FILE\" >&2\n" +
+            "echo \"NODE_PATH=$NODE_PATH\" >&2\n" +
             "echo \"NODE_OPTIONS=$NODE_OPTIONS\" >&2\n" +
             "echo \"Testing cert file access:\" >&2\n" +
             "ls -lh $PREFIX/etc/tls/cert.pem >&2 || echo \"cert.pem not found!\" >&2\n" +

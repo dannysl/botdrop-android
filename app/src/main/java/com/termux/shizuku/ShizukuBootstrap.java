@@ -58,13 +58,16 @@ public final class ShizukuBootstrap {
     public static void bootstrap(Context context) {
         appContext = context == null ? null : context.getApplicationContext();
         if (appContext == null) {
+            Logger.logWarn(LOG_TAG, "Bootstrap skipped: context is null");
             return;
         }
 
+        Logger.logInfo(LOG_TAG, "bootstrap: start, package=" + appContext.getPackageName());
         ShizukuProvider.enableMultiProcessSupport(false);
         requestBinderForCurrentProcess(appContext);
 
         if (Shizuku.pingBinder()) {
+            Logger.logInfo(LOG_TAG, "bootstrap: existing binder available, skip startup");
             return;
         }
 
@@ -72,6 +75,7 @@ public final class ShizukuBootstrap {
     }
 
     private static void requestBinderForCurrentProcess(Context context) {
+        Logger.logInfo(LOG_TAG, "requestBinderForCurrentProcess: sending REQUEST_BINDER");
         try {
             ShizukuProvider.requestBinderForNonProviderProcess(context);
         } catch (Throwable tr) {
@@ -81,12 +85,15 @@ public final class ShizukuBootstrap {
 
     private static void ensureServerStarted(Context context) {
         if (starting) {
+            Logger.logWarn(LOG_TAG, "ensureServerStarted: already starting");
             return;
         }
 
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         long lastAttempt = prefs.getLong(PREF_KEY_LAST_START_ATTEMPT, 0);
+        Logger.logInfo(LOG_TAG, "ensureServerStarted: lastAttemptMs=" + lastAttempt + ", nowMs=" + System.currentTimeMillis());
         if (System.currentTimeMillis() - lastAttempt < MAX_RETRY_INTERVAL_MILLIS) {
+            Logger.logWarn(LOG_TAG, "ensureServerStarted: inside retry window");
             return;
         }
 
@@ -120,6 +127,7 @@ public final class ShizukuBootstrap {
 
     private static boolean startWithRoot(Context context, SharedPreferences prefs) {
         if (!hasRootPermission()) {
+            Logger.logWarn(LOG_TAG, "startWithRoot: root not available");
             Logger.logWarn(LOG_TAG, "Root mode not available");
             return false;
         }
@@ -136,6 +144,7 @@ public final class ShizukuBootstrap {
                     android.os.Process.myUid(),
                     false
             );
+            Logger.logInfo(LOG_TAG, "startWithRoot: command prepared with uid=" + android.os.Process.myUid());
 
             CommandResult result = executeShellAsRoot(command);
             Logger.logInfo(LOG_TAG, String.format(Locale.US,
@@ -161,6 +170,7 @@ public final class ShizukuBootstrap {
 
     private static boolean startWithAdb(Context context, SharedPreferences prefs) {
         if (!isAdbStartAllowed(context)) {
+            Logger.logWarn(LOG_TAG, "startWithAdb: adb start not allowed");
             Logger.logWarn(LOG_TAG, "ADB start not allowed");
             return false;
         }
@@ -187,6 +197,7 @@ public final class ShizukuBootstrap {
         }
 
         if (ShizukuSettings.getPreferences() == null) {
+            Logger.logWarn(LOG_TAG, "startWithAdb: ShizukuSettings is null");
             Logger.logWarn(LOG_TAG, "ShizukuSettings not initialized, cannot start with adb");
             prefs.edit().putString(PREF_KEY_LAST_START_ERROR, "Shizuku settings not initialized").apply();
             return false;
@@ -207,12 +218,13 @@ public final class ShizukuBootstrap {
                 }
 
                 try {
-                    AdbKey key = new AdbKey(new PreferenceAdbKeyStore(ShizukuSettings.getPreferences()), "shizuku");
-                    AdbClient client = new AdbClient("127.0.0.1", port, key);
-                    client.connect();
-                    client.shellCommand(Starter.INSTANCE.internalCommand(context), null);
-                    client.close();
-                    bootSuccess.set(waitForBinder(context));
+                        AdbKey key = new AdbKey(new PreferenceAdbKeyStore(ShizukuSettings.getPreferences()), "shizuku");
+                        AdbClient client = new AdbClient("127.0.0.1", port, key);
+                        client.connect();
+                        Logger.logInfo(LOG_TAG, "startWithAdb: adb connected on port=" + port + ", sending starter command");
+                        client.shellCommand(Starter.INSTANCE.internalCommand(context), null);
+                        client.close();
+                        bootSuccess.set(waitForBinder(context));
                 } catch (Throwable tr) {
                     Logger.logWarn(LOG_TAG, "ADB start execution failed on port " + port + ": " + tr.getMessage());
                     bootSuccess.set(false);
@@ -273,13 +285,17 @@ public final class ShizukuBootstrap {
     }
 
     private static boolean waitForBinder(Context context) {
+        Logger.logInfo(LOG_TAG, "waitForBinder: polling " + BINDER_POLL_COUNT + " times, intervalMs="
+                + BINDER_POLL_INTERVAL_MILLIS);
         for (int retry = 0; retry < BINDER_POLL_COUNT; retry++) {
             if (Shizuku.pingBinder()) {
                 requestBinderForCurrentProcess(context);
+                Logger.logInfo(LOG_TAG, "waitForBinder: binder available at retry=" + retry);
                 return true;
             }
             sleepQuietly(BINDER_POLL_INTERVAL_MILLIS);
         }
+        Logger.logWarn(LOG_TAG, "waitForBinder: binder not ready after polling");
         return false;
     }
 

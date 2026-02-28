@@ -322,7 +322,26 @@ public final class ShizukuBridgeServer {
         }
 
         String auth = headers.get("authorization");
-        return auth != null && auth.equals("Bearer " + mAuthToken);
+        if (auth == null) {
+            return false;
+        }
+
+        String trimmedAuth = auth.trim();
+        if (trimmedAuth.isEmpty()) {
+            return false;
+        }
+
+        if (trimmedAuth.startsWith("Bearer ")) {
+            String token = trimmedAuth.substring("Bearer ".length()).trim();
+            return mAuthToken.equals(token);
+        }
+
+        if (trimmedAuth.startsWith("bearer ")) {
+            String token = trimmedAuth.substring("bearer ".length()).trim();
+            return mAuthToken.equals(token);
+        }
+
+        return mAuthToken.equals(trimmedAuth);
     }
 
     private String readBody(BufferedReader reader, int contentLength) throws IOException {
