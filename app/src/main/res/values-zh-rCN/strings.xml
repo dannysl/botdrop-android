@@ -467,7 +467,7 @@
     <string name="botdrop_feishu_app_id_hint">app-id</string>
     <string name="botdrop_feishu_app_secret_hint">app-secret</string>
     <string name="botdrop_telegram_setup_help">打开设置机器人创建你的 Telegram bot 并获取机器人 ID。</string>
-    <string name="botdrop_feishu_setup_steps">步骤1：仅输入 App ID + App Secret 并点击 “%1$s”。\n步骤2：连接后向机器人发送消息获取用户 ID。\n步骤3：将用户 ID 粘贴到这里，再次点击“%1$s”开始。</string>
+    <string name="botdrop_feishu_setup_steps">步骤1：仅输入 App ID + App Secret 并点击”连接并启动”。\n步骤2：连接后向机器人发送消息获取用户 ID。\n步骤3：将用户 ID 粘贴到这里，再次点击”连接并启动”开始。</string>
     <string name="botdrop_add_custom_provider">添加自定义提供商</string>
     <string name="botdrop_api_key_required_for_provider">该提供商需要填写 API Key</string>
     <string name="botdrop_backup_permission_denied_with_manual_restore">无法读取存储权限，已跳过自动恢复，可稍后手动恢复 OpenClaw 备份。</string>
