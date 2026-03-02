@@ -2,6 +2,12 @@ plugins {
     id "com.android.application"
 }
 
+def hasGoogleServicesConfig = file("google-services.json").exists()
+if (hasGoogleServicesConfig) {
+    apply plugin: "com.google.firebase.crashlytics"
+    apply plugin: "com.google.gms.google-services"
+}
+
 ext {
     // The packageVariant defines the bootstrap variant that will be included in the app APK.
     // This must be supported by com.termux.shared.termux.TermuxBootstrap.PackageVariant or app will
@@ -42,6 +48,8 @@ android {
         implementation project(':server')
         implementation project(':starter')
         implementation project(':manager')
+        implementation platform("com.google.firebase:firebase-bom:33.13.0")
+        implementation "com.google.firebase:firebase-crashlytics"
 
         implementation project(":terminal-view")
         implementation project(":termux-shared")
@@ -51,8 +59,8 @@ android {
         applicationId "app.botdrop"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 8
-        versionName "0.2.6"
+        versionCode 9
+        versionName "0.2.7"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -103,10 +111,18 @@ android {
             minifyEnabled true
             shrinkResources false // Reproducible builds
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField "boolean", "CRASHLYTICS_DEFAULT_ENABLED", "true"
+
+            if (hasGoogleServicesConfig) {
+                firebaseCrashlytics {
+                    mappingFileUploadEnabled true
+                }
+            }
         }
 
         debug {
             signingConfig signingConfigs.debug
+            buildConfigField "boolean", "CRASHLYTICS_DEFAULT_ENABLED", "false"
         }
     }
 
@@ -188,8 +204,7 @@ def downloadBootstrap(String arch) {
     }
 
     def remoteUrls = [
-        "https://github.com/zhixianio/botdrop-packages/releases/latest/download/bootstrap-" + arch + ".zip",
-        "https://github.com/zhixianio/botdrop-packages/releases/latest/download/botdrop-repo-" + arch + ".zip"
+        "https://github.com/zhixianio/botdrop-packages/releases/download/bootstrap-latest/bootstrap-" + arch + ".zip"
     ]
 
     file.parentFile.mkdirs()

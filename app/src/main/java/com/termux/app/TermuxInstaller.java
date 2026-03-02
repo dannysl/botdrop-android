@@ -23,6 +23,7 @@ import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
+import app.botdrop.OpenclawVersionUtils;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -61,11 +62,19 @@ import static com.termux.shared.termux.TermuxConstants.TERMUX_STAGING_PREFIX_DIR
 public final class TermuxInstaller {
 
     private static final String LOG_TAG = "TermuxInstaller";
+    private static final String BOTDROP_APT_SOURCE_LINE =
+        "deb [trusted=yes] https://zhixianio.github.io/botdrop-packages/ stable main";
+    private static final String BOTDROP_APT_SOURCES_LIST = TERMUX_PREFIX_DIR_PATH + "/etc/apt/sources.list";
+    private static final String BOTDROP_APT_SOURCES_LIST_D = TERMUX_PREFIX_DIR_PATH + "/etc/apt/sources.list.d";
+    private static final String BOTDROP_APT_LIST_FILE = BOTDROP_APT_SOURCES_LIST_D + "/botdrop.list";
 
     /** Performs bootstrap setup if necessary. */
     public static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone) {
         String bootstrapErrorMessage;
         Error filesDirectoryAccessibleError;
+        String openclawVersion = activity.getSharedPreferences(
+            "botdrop_settings", Context.MODE_PRIVATE)
+            .getString("openclaw_install_version", "openclaw@latest");
 
         // This will also call Context.getFilesDir(), which should ensure that termux files directory
         // is created if it does not already exist
@@ -108,6 +117,8 @@ public final class TermuxInstaller {
             if (TermuxFileUtils.isTermuxPrefixDirectoryEmpty()) {
                 Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" exists but is empty or only contains specific unimportant files.");
             } else {
+                // Upgrade path: refresh BotDrop scripts and force BotDrop APT source only.
+                createBotDropScripts(openclawVersion);
                 whenDone.run();
                 return;
             }
@@ -227,9 +238,6 @@ public final class TermuxInstaller {
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
                     // Create BotDrop install script and environment
-                    String openclawVersion = activity.getSharedPreferences(
-                        "botdrop_settings", Context.MODE_PRIVATE)
-                        .getString("openclaw_install_version", "openclaw@latest");
                     createBotDropScripts(openclawVersion);
 
                     activity.runOnUiThread(whenDone);
@@ -433,6 +441,7 @@ public final class TermuxInstaller {
                 "    exit 0\n" +
                 "fi\n\n" +
                 "echo \"BOTDROP_STEP:0:START:Setting up environment\"\n" +
+                buildBotDropAptSourceScript() +
                 "chmod +x $PREFIX/bin/* 2>/dev/null\n" +
                 "chmod +x $PREFIX/lib/node_modules/.bin/* 2>/dev/null\n" +
                 "chmod +x $PREFIX/lib/node_modules/npm/bin/* 2>/dev/null\n" +
@@ -503,7 +512,8 @@ public final class TermuxInstaller {
                 "fi\n" +
                 "fi\n" +
                 "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
-                "NPM_OUTPUT=$(npm install -g " + openclawVersion + " --ignore-scripts --force 2>&1)\n" +
+                "\n" +
+                "NPM_OUTPUT=$(" + OpenclawVersionUtils.buildNpmInstallCommand(openclawVersion) + " 2>&1)\n" +
                 "NPM_EXIT=$?\n" +
                 "if [ $NPM_EXIT -eq 0 ]; then\n" +
                 "    # Create a stable openclaw wrapper (npm-generated shim can be broken on Android/proot)\n" +
@@ -573,6 +583,7 @@ public final class TermuxInstaller {
                 "mkdir -p $TMPDIR 2>/dev/null\n" +
                 "# Enable Node.js to find globally-installed native addons (e.g. @img/sharp-android-arm64)\n" +
                 "export NODE_PATH=$PREFIX/lib/node_modules\n\n" +
+                buildBotDropAptSourceScript() +
                 "# `openclaw` is installed as a wrapper that already runs under `termux-chroot`.\n" +
                 "# Avoid nesting proot/termux-chroot which can make commands extremely slow.\n\n" +
                 "# Auto-start sshd if not running\n" +
@@ -596,6 +607,18 @@ public final class TermuxInstaller {
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to create BotDrop scripts", e);
         }
+    }
+
+    private static String buildBotDropAptSourceScript() {
+        return
+            "mkdir -p " + BOTDROP_APT_SOURCES_LIST_D + "\n" +
+            "printf '%s\\n' '" + BOTDROP_APT_SOURCE_LINE + "' > " + BOTDROP_APT_LIST_FILE + "\n" +
+            "printf '%s\\n' '" + BOTDROP_APT_SOURCE_LINE + "' > " + BOTDROP_APT_SOURCES_LIST + "\n" +
+            "for f in " + BOTDROP_APT_SOURCES_LIST_D + "/*.list; do\n" +
+            "    if [ -f \"$f\" ] && [ \"$f\" != \"" + BOTDROP_APT_LIST_FILE + "\" ]; then\n" +
+            "        rm -f \"$f\"\n" +
+            "    fi\n" +
+            "done\n";
     }
 
 }

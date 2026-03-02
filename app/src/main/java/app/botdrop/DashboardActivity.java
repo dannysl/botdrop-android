@@ -102,8 +102,6 @@ public class DashboardActivity extends Activity {
     private static final String OPENCLAW_DEFAULT_WEB_UI_PATH = "/";
     private static final String OPENCLAW_DEFAULT_WEB_UI_URL = "http://127.0.0.1:" + OPENCLAW_DEFAULT_WEB_UI_PORT + OPENCLAW_DEFAULT_WEB_UI_PATH;
     private static final String OPENCLAW_WEB_UI_TOKEN_KEY = "token";
-    private static final String OPENCLAW_WEB_UI_BUTTON_TEXT_DEFAULT = "Open Web UI";
-    private static final String OPENCLAW_WEB_UI_BUTTON_TEXT_PENDING = "Opening Web UI";
     private static final String OPENCLAW_HOME_FOLDER = ".openclaw";
     private static final String BOTDROP_HOME_FOLDER = "botdrop";
     private static final String GATEWAY_LOG_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/gateway.log";
@@ -473,7 +471,7 @@ public class DashboardActivity extends Activity {
         mOpenclawWebUiButton.setAlpha(opening ? 0.6f : 1f);
 
         if (TextUtils.isEmpty(statusText)) {
-            mOpenclawWebUiButton.setText(OPENCLAW_WEB_UI_BUTTON_TEXT_DEFAULT);
+            mOpenclawWebUiButton.setText(getString(R.string.botdrop_open_web_ui));
         } else {
             mOpenclawWebUiButton.setText(statusText);
         }
@@ -487,21 +485,19 @@ public class DashboardActivity extends Activity {
                 runOnUiThread(() -> {
                     setButtonEnabled(mOpenclawBackupButton, true);
                     if (TextUtils.isEmpty(backupPath)) {
-                        Toast.makeText(this, "No OpenClaw data folder available to backup", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    Toast.makeText(
-                        this,
-                        "OpenClaw backup created:\n"
-                            + backupPath
-                            + "\nIncludes full .openclaw and botdrop folders.",
-                        Toast.LENGTH_LONG
-                    ).show();
-                });
-            }).start();
+                    Toast.makeText(this, getString(R.string.botdrop_no_openclaw_data_folder), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Toast.makeText(
+                    this,
+                    getString(R.string.botdrop_openclaw_backup_created, backupPath),
+                    Toast.LENGTH_LONG
+                ).show();
+            });
+        }).start();
         }, () -> Toast.makeText(
             this,
-            "Storage permission is required to backup OpenClaw data",
+            getString(R.string.botdrop_backup_permission_denied),
             Toast.LENGTH_SHORT
         ).show());
     }
@@ -512,18 +508,18 @@ public class DashboardActivity extends Activity {
             if (backupFile == null) {
                 Toast.makeText(
                     this,
-                    "No backup file found in: " + getOpenclawBackupDirectory().getAbsolutePath(),
+                    getString(R.string.botdrop_no_backup_found, getOpenclawBackupDirectory().getAbsolutePath()),
                     Toast.LENGTH_SHORT
                 ).show();
                 return;
             }
 
             confirmOpenclawRestore(backupFile);
-        }, () -> Toast.makeText(
-            this,
-            "Storage permission is required to restore OpenClaw data",
-            Toast.LENGTH_SHORT
-        ).show());
+            }, () -> Toast.makeText(
+                this,
+                getString(R.string.botdrop_backup_permission_denied),
+                Toast.LENGTH_SHORT
+            ).show());
     }
 
     private void runWithOpenclawStoragePermission(@NonNull Runnable action) {
@@ -574,7 +570,7 @@ public class DashboardActivity extends Activity {
             } else {
                 Toast.makeText(
                     this,
-                    "Storage permission is required to backup or restore OpenClaw data",
+                    getString(R.string.botdrop_backup_permission_denied),
                     Toast.LENGTH_SHORT
                 ).show();
             }
@@ -595,16 +591,17 @@ public class DashboardActivity extends Activity {
 
     private void confirmOpenclawRestore(File backupFile) {
         String createdAtText = formatBackupTimestamp(readBackupCreatedAt(backupFile));
-        String message = "Restore OpenClaw data from:\n"
-            + backupFile.getName()
-            + "\nCreated at: " + createdAtText
-            + "\n\nCurrent data files will be replaced.";
+        String message = getString(
+            R.string.botdrop_restore_openclaw_data_message,
+            backupFile.getName(),
+            createdAtText
+        );
 
         new AlertDialog.Builder(this)
-            .setTitle("Restore OpenClaw Data")
+            .setTitle(getString(R.string.botdrop_restore_openclaw_data))
             .setMessage(message)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Restore", (dialog, which) -> performOpenclawRestore(backupFile))
+            .setNegativeButton(getString(R.string.botdrop_cancel), null)
+            .setPositiveButton(getString(R.string.botdrop_restore), (dialog, which) -> performOpenclawRestore(backupFile))
             .show();
     }
 
@@ -615,16 +612,12 @@ public class DashboardActivity extends Activity {
             runOnUiThread(() -> {
                 setButtonEnabled(mOpenclawRestoreButton, true);
                 if (!restored) {
-                    Toast.makeText(this, "Failed to restore OpenClaw data", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.botdrop_failed_openclaw_backup_restore), Toast.LENGTH_SHORT).show();
                     return;
                 }
                 loadCurrentModel();
                 loadChannelInfo();
-                Toast.makeText(
-                    this,
-                    "OpenClaw folder restored successfully.",
-                    Toast.LENGTH_LONG
-                ).show();
+                    Toast.makeText(this, getString(R.string.botdrop_openclaw_data_restored), Toast.LENGTH_LONG).show();
             });
         }).start();
     }
@@ -1282,7 +1275,7 @@ public class DashboardActivity extends Activity {
                     if (uptimeResult.success) {
                         String uptime = uptimeResult.stdout.trim();
                         if (!uptime.equals("—")) {
-                            mUptimeText.setText("Uptime: " + uptime);
+                            mUptimeText.setText(getString(R.string.botdrop_uptime, uptime));
                         } else {
                             mUptimeText.setText("—");
                         }
@@ -1297,13 +1290,13 @@ public class DashboardActivity extends Activity {
      */
     private void updateStatusUI(boolean isRunning) {
         if (isRunning) {
-            mStatusText.setText("Gateway Running");
+            mStatusText.setText(getString(R.string.botdrop_gateway_running));
             mStatusIndicator.setBackgroundResource(R.drawable.status_indicator_running);
             setButtonState(mStartButton, false, true);
             setButtonState(mStopButton, true, false);
             setButtonState(mRestartButton, true, true);
         } else {
-            mStatusText.setText("Gateway Stopped");
+            mStatusText.setText(getString(R.string.botdrop_gateway_stopped));
             mStatusIndicator.setBackgroundResource(R.drawable.status_indicator_stopped);
             mUptimeText.setText("—");
             setButtonState(mStartButton, true, true);
@@ -1333,7 +1326,7 @@ public class DashboardActivity extends Activity {
     }
 
     private void showUpdateBanner(String latestVersion, String downloadUrl) {
-        mUpdateBannerText.setText("Update available: v" + latestVersion);
+        mUpdateBannerText.setText(getString(R.string.botdrop_update_available_version, latestVersion));
         mUpdateBanner.setVisibility(View.VISIBLE);
 
         findViewById(R.id.btn_update_download).setOnClickListener(v -> {
@@ -1374,17 +1367,17 @@ public class DashboardActivity extends Activity {
             }
 
             if (ChannelSetupHelper.isTelegramConfigured(channels.optJSONObject("telegram"))) {
-                mTelegramStatus.setText("● Connected");
+                mTelegramStatus.setText(getString(R.string.botdrop_connected));
                 mTelegramStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             }
 
             if (ChannelSetupHelper.isDiscordConfigured(channels.optJSONObject("discord"))) {
-                mDiscordStatus.setText("● Connected");
+                mDiscordStatus.setText(getString(R.string.botdrop_connected));
                 mDiscordStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             }
 
             if (ChannelSetupHelper.isFeishuConfigured(channels.optJSONObject("feishu")) && mFeishuStatus != null) {
-                mFeishuStatus.setText("● Connected");
+                mFeishuStatus.setText(getString(R.string.botdrop_connected));
                 mFeishuStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             }
         } catch (Exception e) {
@@ -1400,15 +1393,15 @@ public class DashboardActivity extends Activity {
             return;
         }
 
-        Toast.makeText(this, "Starting gateway...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.botdrop_starting_gateway), Toast.LENGTH_SHORT).show();
         mStartButton.setEnabled(false);
 
         mBotDropService.startGateway(result -> {
             if (result.success) {
-                Toast.makeText(this, "Gateway started", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_started), Toast.LENGTH_SHORT).show();
                 refreshStatus();
             } else {
-                Toast.makeText(this, "Failed to start gateway", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_start_failed), Toast.LENGTH_SHORT).show();
                 mStartButton.setEnabled(true);
                 Logger.logError(LOG_TAG, "Start failed: " + result.stderr);
             }
@@ -1423,15 +1416,15 @@ public class DashboardActivity extends Activity {
             return;
         }
 
-        Toast.makeText(this, "Stopping gateway...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.botdrop_stopping_gateway), Toast.LENGTH_SHORT).show();
         mStopButton.setEnabled(false);
 
         mBotDropService.stopGateway(result -> {
             if (result.success) {
-                Toast.makeText(this, "Gateway stopped", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_stopped_toast), Toast.LENGTH_SHORT).show();
                 refreshStatus();
             } else {
-                Toast.makeText(this, "Failed to stop gateway", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_stop_failed), Toast.LENGTH_SHORT).show();
                 mStopButton.setEnabled(true);
                 Logger.logError(LOG_TAG, "Stop failed: " + result.stderr);
             }
@@ -1446,15 +1439,15 @@ public class DashboardActivity extends Activity {
             return;
         }
 
-        Toast.makeText(this, "Restarting gateway...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.botdrop_gateway_restarting), Toast.LENGTH_SHORT).show();
         mRestartButton.setEnabled(false);
 
         mBotDropService.restartGateway(result -> {
             if (result.success) {
-                Toast.makeText(this, "Gateway restarted", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_restarted), Toast.LENGTH_SHORT).show();
                 refreshStatus();
             } else {
-                Toast.makeText(this, "Failed to restart gateway", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_restart_failed), Toast.LENGTH_SHORT).show();
                 mRestartButton.setEnabled(true);
                 Logger.logError(LOG_TAG, "Restart failed: " + result.stderr);
             }
@@ -1469,14 +1462,14 @@ public class DashboardActivity extends Activity {
             return;
         }
 
-        Toast.makeText(this, "Restarting gateway with new model...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.botdrop_gateway_restarting_with_new_model), Toast.LENGTH_SHORT).show();
 
         mBotDropService.restartGateway(result -> {
             if (result.success) {
-                Toast.makeText(this, "Gateway restarted successfully", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_restarted_successfully), Toast.LENGTH_SHORT).show();
                 loadCurrentModel();
             } else {
-                Toast.makeText(this, "Failed to restart gateway", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_gateway_restart_failed), Toast.LENGTH_SHORT).show();
                 Logger.logError(LOG_TAG, "Restart failed: " + result.stderr);
                 loadCurrentModel();
             }
@@ -1494,7 +1487,7 @@ public class DashboardActivity extends Activity {
         String password = readSshPassword();
         if (password == null) password = "<not set>";
 
-        mSshInfoText.setText("ssh -p 8022 " + ip + "\nPassword: " + password);
+        mSshInfoText.setText(getString(R.string.botdrop_ssh_password_label, ip, password));
         mSshCard.setVisibility(View.VISIBLE);
     }
 
@@ -1716,16 +1709,16 @@ public class DashboardActivity extends Activity {
         }
 
         if (!mBound || mBotDropService == null) {
-            Toast.makeText(this, "Service not connected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
             return;
         }
 
         if (mOpenclawWebUiOpening) {
-            Toast.makeText(this, "Web UI is already opening", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_openclaw_web_ui_already_opening), Toast.LENGTH_SHORT).show();
             return;
         }
         mOpenclawWebUiOpening = true;
-        setOpenclawWebUiButtonState(true, OPENCLAW_WEB_UI_BUTTON_TEXT_PENDING);
+        setOpenclawWebUiButtonState(true, getString(R.string.botdrop_opening_web_ui));
 
         mBotDropService.isGatewayRunning(result -> {
             if (!mUiVisible) {
@@ -1737,7 +1730,7 @@ public class DashboardActivity extends Activity {
             if (result == null || !result.success || !"running".equals(result.stdout.trim())) {
                 mOpenclawWebUiOpening = false;
                 setOpenclawWebUiButtonState(false, null);
-                Toast.makeText(this, "OpenClaw gateway is not running", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.botdrop_openclaw_not_running), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -1779,7 +1772,7 @@ public class DashboardActivity extends Activity {
                         if (!reachable && attempt >= OPENCLAW_WEB_UI_REACHABILITY_RETRY_COUNT) {
                             Toast.makeText(
                                 this,
-                                "Web UI is still starting. Opened directly; please refresh in browser if needed.",
+                                getString(R.string.botdrop_web_ui_still_starting),
                                 Toast.LENGTH_LONG
                             ).show();
                         }
@@ -1792,7 +1785,7 @@ public class DashboardActivity extends Activity {
             final int nextAttempt = attempt + 1;
             runOnUiThread(() -> setOpenclawWebUiButtonState(
                 true,
-                OPENCLAW_WEB_UI_BUTTON_TEXT_PENDING + " (" + nextAttempt + "/" + OPENCLAW_WEB_UI_REACHABILITY_RETRY_COUNT + ")"
+                getString(R.string.botdrop_opening_web_ui_attempt, nextAttempt, OPENCLAW_WEB_UI_REACHABILITY_RETRY_COUNT)
             ));
             mHandler.postDelayed(
                 () -> openOpenclawUrlWithReadinessCheck(url, nextAttempt),
@@ -2405,10 +2398,10 @@ public class DashboardActivity extends Activity {
         try {
             startActivity(browserIntent);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "No app available to open web links", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_no_app_available_to_open_web_links), Toast.LENGTH_SHORT).show();
             Logger.logWarn(LOG_TAG, "No activity found for URL: " + url);
         } catch (Exception e) {
-            Toast.makeText(this, "Failed to open browser", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_open_browser_error), Toast.LENGTH_SHORT).show();
             Logger.logWarn(LOG_TAG, "Failed to open URL: " + url + "; " + e.getMessage());
         }
     }
@@ -2458,7 +2451,7 @@ public class DashboardActivity extends Activity {
      */
     private void showModelSelector() {
         if (!mBound || mBotDropService == null) {
-            Toast.makeText(this, "Service not available. Please try again.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_service_unavailable_try_again), Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -2479,10 +2472,10 @@ public class DashboardActivity extends Activity {
             return;
         }
 
-        mCurrentModelText.setText("Updating...");
+        mCurrentModelText.setText(getString(R.string.botdrop_updating_model));
         String[] parts = fullModel.split("/", 2);
         if (parts.length != 2) {
-            Toast.makeText(this, "Invalid model format", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_invalid_model_format), Toast.LENGTH_SHORT).show();
             loadCurrentModel();
             return;
         }
@@ -2491,7 +2484,7 @@ public class DashboardActivity extends Activity {
         String model = parts[1];
         boolean isCustomProvider = !TextUtils.isEmpty(optionalBaseUrl);
         if (isCustomProvider && (availableModels == null || availableModels.isEmpty())) {
-            Toast.makeText(DashboardActivity.this, "No custom model list found", Toast.LENGTH_SHORT).show();
+            Toast.makeText(DashboardActivity.this, getString(R.string.botdrop_no_custom_model_list), Toast.LENGTH_SHORT).show();
             loadCurrentModel();
             return;
         }
@@ -2505,7 +2498,7 @@ public class DashboardActivity extends Activity {
         );
 
         if (!configured) {
-            Toast.makeText(DashboardActivity.this, "Failed to update model settings", Toast.LENGTH_SHORT).show();
+            Toast.makeText(DashboardActivity.this, getString(R.string.botdrop_failed_update_model_settings), Toast.LENGTH_SHORT).show();
             Logger.logError(LOG_TAG, "Failed to update model settings for " + fullModel);
             loadCurrentModel();
             return;
@@ -2540,7 +2533,7 @@ public class DashboardActivity extends Activity {
 
     private void showOpenclawLog() {
         if (!mBound || mBotDropService == null) {
-            Toast.makeText(this, "Service not connected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -2555,7 +2548,7 @@ public class DashboardActivity extends Activity {
 
             String logText = result != null ? result.stdout : null;
             if (result == null) {
-                logText = "Failed to read OpenClaw logs.";
+                logText = getString(R.string.botdrop_failed_to_read_openclaw_logs);
             } else if (!result.success) {
                 StringBuilder fallback = new StringBuilder();
                 if (!TextUtils.isEmpty(result.stderr)) {
@@ -2569,12 +2562,12 @@ public class DashboardActivity extends Activity {
                 }
                 logText = fallback.toString();
                 if (TextUtils.isEmpty(logText)) {
-                    logText = "Failed to read OpenClaw logs. Exit code: " + result.exitCode;
+                    logText = getString(R.string.botdrop_failed_to_read_openclaw_logs_exit_code, result.exitCode);
                 }
             }
 
             if (TextUtils.isEmpty(logText)) {
-                logText = "No log output available.";
+                logText = getString(R.string.botdrop_no_log_output_available);
             }
 
             final String finalLogText = logText;
@@ -2599,13 +2592,13 @@ public class DashboardActivity extends Activity {
     private void copyToClipboard(String content) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) {
-            Toast.makeText(this, "Clipboard unavailable", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_clipboard_unavailable), Toast.LENGTH_SHORT).show();
             return;
         }
         String textToCopy = content == null ? "" : content;
         ClipData clip = ClipData.newPlainText("OpenClaw Gateway Log", textToCopy);
         clipboard.setPrimaryClip(clip);
-        Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.botdrop_log_copied), Toast.LENGTH_SHORT).show();
     }
 
     // --- OpenClaw update ---
@@ -2615,7 +2608,7 @@ public class DashboardActivity extends Activity {
             return;
         }
         if (!mBound || mBotDropService == null) {
-            Toast.makeText(this, "Service not connected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -2627,10 +2620,10 @@ public class DashboardActivity extends Activity {
         }
 
         mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
-            .setTitle("OpenClaw Versions")
-            .setMessage("Loading versions…")
+            .setTitle(getString(R.string.botdrop_openclaw_versions))
+            .setMessage(getString(R.string.botdrop_loading_versions))
             .setCancelable(false)
-            .setNegativeButton("Cancel", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setNegativeButton(R.string.botdrop_cancel, (d, w) -> setOpenclawVersionManagerBusy(false))
             .create();
         mOpenclawVersionManagerDialog.show();
 
@@ -2646,7 +2639,7 @@ public class DashboardActivity extends Activity {
 
                 if (versions == null || versions.isEmpty()) {
                     showOpenclawVersionManagerErrorDialog(
-                        TextUtils.isEmpty(errorMessage) ? "No versions available" : errorMessage
+                        TextUtils.isEmpty(errorMessage) ? getString(R.string.botdrop_no_versions_available) : errorMessage
                     );
                     return;
                 }
@@ -2658,14 +2651,14 @@ public class DashboardActivity extends Activity {
 
     private void showOpenclawVersionManagerErrorDialog(String message) {
         if (TextUtils.isEmpty(message)) {
-            message = "Failed to load version list";
+            message = getString(R.string.botdrop_failed_to_load_version_list);
         }
 
         mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
-            .setTitle("OpenClaw Versions")
+            .setTitle(getString(R.string.botdrop_openclaw_versions))
             .setMessage(message)
-            .setNegativeButton("Close", (d, w) -> setOpenclawVersionManagerBusy(false))
-            .setPositiveButton("Retry", (d, w) -> showOpenclawVersionManagerDialog())
+            .setNegativeButton(R.string.botdrop_close, (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setPositiveButton(R.string.botdrop_retry, (d, w) -> showOpenclawVersionManagerDialog())
             .setOnDismissListener(d -> setOpenclawVersionManagerBusy(false))
             .create();
         mOpenclawVersionManagerDialog.show();
@@ -2674,7 +2667,7 @@ public class DashboardActivity extends Activity {
     private void showOpenclawVersionListDialog(List<String> versions) {
         final List<String> normalized = OpenclawVersionUtils.normalizeVersionList(versions);
         if (normalized.isEmpty()) {
-            showOpenclawVersionManagerErrorDialog("No valid versions found");
+            showOpenclawVersionManagerErrorDialog(getString(R.string.botdrop_no_valid_versions_found));
             return;
         }
 
@@ -2684,7 +2677,7 @@ public class DashboardActivity extends Activity {
         }
 
         mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
-            .setTitle("OpenClaw Versions")
+            .setTitle(getString(R.string.botdrop_openclaw_versions))
             .setItems(labels, (d, which) -> {
                 if (which < 0 || which >= normalized.size()) {
                     setOpenclawVersionManagerBusy(false);
@@ -2692,7 +2685,7 @@ public class DashboardActivity extends Activity {
                 }
                 showOpenclawVersionInstallConfirm(normalized.get(which));
             })
-            .setNegativeButton("Close", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setNegativeButton(R.string.botdrop_close, (d, w) -> setOpenclawVersionManagerBusy(false))
             .create();
         mOpenclawVersionManagerDialog.show();
     }
@@ -2701,19 +2694,19 @@ public class DashboardActivity extends Activity {
         String installVersion = OpenclawVersionUtils.normalizeInstallVersion(version);
         if (TextUtils.isEmpty(installVersion)) {
             setOpenclawVersionManagerBusy(false);
-            Toast.makeText(this, "Invalid OpenClaw version", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_invalid_version_format), Toast.LENGTH_SHORT).show();
             return;
         }
 
         mOpenclawVersionManagerDialog = new AlertDialog.Builder(this)
-            .setTitle("Install OpenClaw")
-            .setMessage("Install " + installVersion + "?")
+            .setTitle(getString(R.string.botdrop_install) + " " + getString(R.string.botdrop_openclaw))
+            .setMessage(getString(R.string.botdrop_install_openclaw_confirm, installVersion))
             .setCancelable(false)
-            .setPositiveButton("Install", (d, w) -> {
+            .setPositiveButton(R.string.botdrop_install, (d, w) -> {
                 setOpenclawVersionManagerBusy(true);
                 startOpenclawUpdate(installVersion);
             })
-            .setNegativeButton("Cancel", (d, w) -> setOpenclawVersionManagerBusy(false))
+            .setNegativeButton(R.string.botdrop_cancel, (d, w) -> setOpenclawVersionManagerBusy(false))
             .setOnDismissListener(d -> setOpenclawVersionManagerBusy(false))
             .create();
         mOpenclawVersionManagerDialog.show();
@@ -2728,15 +2721,15 @@ public class DashboardActivity extends Activity {
         mBotDropService.executeCommand(OpenclawVersionUtils.VERSIONS_COMMAND, result -> {
             if (result == null || !result.success) {
                 String fallbackError = result == null
-                    ? "Failed to fetch versions"
-                    : "Failed to fetch versions (exit " + result.exitCode + ")";
+                    ? getString(R.string.botdrop_failed_to_fetch_versions)
+                    : getString(R.string.botdrop_failed_to_fetch_versions_exit, String.valueOf(result.exitCode));
                 cb.onResult(OpenclawVersionUtils.buildFallback(currentVersion), fallbackError);
                 return;
             }
 
             List<String> versions = OpenclawVersionUtils.parseVersions(result.stdout);
             if (versions.isEmpty()) {
-                cb.onResult(OpenclawVersionUtils.buildFallback(currentVersion), "No versions found");
+                cb.onResult(OpenclawVersionUtils.buildFallback(currentVersion), getString(R.string.botdrop_no_versions_found));
                 return;
             }
             cb.onResult(versions, null);
@@ -2767,7 +2760,7 @@ public class DashboardActivity extends Activity {
         // Display current version
         String currentVersion = BotDropService.getOpenclawVersion();
         if (currentVersion != null && mOpenclawVersionText != null) {
-            mOpenclawVersionText.setText("OpenClaw v" + currentVersion);
+            mOpenclawVersionText.setText(getString(R.string.botdrop_openclaw_version, currentVersion));
         }
 
         // Also check stored result immediately (in case a previous check found an update)
@@ -2792,17 +2785,17 @@ public class DashboardActivity extends Activity {
 
     private void forceCheckOpenclawUpdate() {
         if (!mBound || mBotDropService == null) {
-            Toast.makeText(this, "Service not connected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
             return;
         }
 
         if (mOpenclawCheckUpdateButton == null) {
-            Toast.makeText(this, "Check button unavailable", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_check_button_unavailable), Toast.LENGTH_SHORT).show();
             return;
         }
 
         mOpenclawCheckUpdateButton.setEnabled(false);
-        mOpenclawCheckUpdateButton.setText("Checking OpenClaw...");
+        mOpenclawCheckUpdateButton.setText(getString(R.string.botdrop_checking_openclaw));
         mOpenclawLatestUpdateVersion = null;
         mOpenclawManualCheckRequested = true;
 
@@ -2810,7 +2803,7 @@ public class DashboardActivity extends Activity {
             @Override
             public void onUpdateAvailable(String current, String latest) {
                 mOpenclawCheckUpdateButton.setEnabled(true);
-                mOpenclawCheckUpdateButton.setText("Check OpenClaw updates");
+                mOpenclawCheckUpdateButton.setText(getString(R.string.botdrop_check_openclaw_updates));
                 mOpenclawManualCheckRequested = false;
                 showOpenclawUpdateDialog(current, latest, true);
             }
@@ -2818,10 +2811,10 @@ public class DashboardActivity extends Activity {
             @Override
             public void onNoUpdate() {
                 mOpenclawCheckUpdateButton.setEnabled(true);
-                mOpenclawCheckUpdateButton.setText("Check OpenClaw updates");
+                mOpenclawCheckUpdateButton.setText(getString(R.string.botdrop_check_openclaw_updates));
                 mOpenclawManualCheckRequested = false;
                 dismissOpenclawUpdateDialog();
-                Toast.makeText(DashboardActivity.this, "Already up to date", Toast.LENGTH_SHORT).show();
+                Toast.makeText(DashboardActivity.this, getString(R.string.botdrop_already_up_to_date), Toast.LENGTH_SHORT).show();
             }
         }, true);
     }
@@ -2843,20 +2836,18 @@ public class DashboardActivity extends Activity {
         }
 
         mOpenclawLatestUpdateVersion = latestVersion;
-        String currentPart = TextUtils.isEmpty(currentVersion) ? "Unknown" : currentVersion;
-        String content =
-            "OpenClaw update available: v" + currentPart + " → v" + latestVersion + "\n\n" +
-            "A newer OpenClaw version is available.\nWould you like to update now?";
+        String currentPart = TextUtils.isEmpty(currentVersion) ? getString(R.string.botdrop_unknown) : currentVersion;
+        String content = getString(R.string.botdrop_openclaw_update_available, currentPart, latestVersion);
 
         dismissOpenclawUpdateDialog();
         final String updateVersion = latestVersion;
         mOpenclawUpdateDialog = new AlertDialog.Builder(this)
-            .setTitle("Update available")
+            .setTitle(getString(R.string.botdrop_update_available))
             .setMessage(content)
             .setCancelable(true)
-            .setPositiveButton("Update", (d, w) -> startOpenclawUpdate(updateVersion))
-            .setNeutralButton("Later", null)
-            .setNegativeButton("Dismiss", (d, w) -> dismissOpenclawUpdate(updateVersion))
+            .setPositiveButton(R.string.botdrop_update, (d, w) -> startOpenclawUpdate(updateVersion))
+            .setNeutralButton(R.string.botdrop_later, null)
+            .setNegativeButton(R.string.botdrop_dismiss, (d, w) -> dismissOpenclawUpdate(updateVersion))
             .setOnDismissListener(dialog -> {
                 if (mOpenclawUpdateDialog == dialog) {
                     mOpenclawUpdateDialog = null;
@@ -2875,14 +2866,14 @@ public class DashboardActivity extends Activity {
             Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://botdrop.app/"));
             startActivity(browserIntent);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_no_browser_available), Toast.LENGTH_SHORT).show();
         }
     }
 
     private void dismissOpenclawUpdate(String version) {
         if (!TextUtils.isEmpty(version)) {
             OpenClawUpdateChecker.dismiss(this, version);
-            Toast.makeText(this, "Dismissed update: v" + version, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_dismissed_update, version), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -2895,7 +2886,7 @@ public class DashboardActivity extends Activity {
 
     private void startOpenclawUpdate(String targetVersion) {
         if (TextUtils.isEmpty(targetVersion)) {
-            Toast.makeText(this, "No update target version", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.botdrop_no_update_target_version), Toast.LENGTH_SHORT).show();
             setOpenclawVersionManagerBusy(false);
             return;
         }
@@ -2923,7 +2914,7 @@ public class DashboardActivity extends Activity {
         TextView statusMessage = dialogView.findViewById(R.id.update_status_message);
 
         AlertDialog progressDialog = new AlertDialog.Builder(this)
-            .setTitle("Updating OpenClaw")
+            .setTitle(R.string.botdrop_updating_openclaw)
             .setView(dialogView)
             .setCancelable(false)
             .create();
@@ -2936,11 +2927,11 @@ public class DashboardActivity extends Activity {
 
         // Map step messages to step indices
         final String[] stepMessages = {
-            "Stopping gateway...",
-            "Installing update...",
-            "Finalizing...",
-            "Starting gateway...",
-            "Refreshing model list...",
+            getString(R.string.botdrop_stopping_gateway) + "...",
+            getString(R.string.botdrop_installing_update) + "...",
+            getString(R.string.botdrop_finalizing) + "...",
+            getString(R.string.botdrop_starting_gateway) + "...",
+            getString(R.string.botdrop_refreshing_model_list) + "...",
         };
 
         mBotDropService.updateOpenclaw(targetVersion,
@@ -2980,9 +2971,9 @@ public class DashboardActivity extends Activity {
                 setOpenclawVersionManagerBusy(false);
                 refreshStatus();
                 new AlertDialog.Builder(DashboardActivity.this)
-                    .setTitle("Update Failed")
+                    .setTitle(R.string.botdrop_update_failed)
                     .setMessage(error)
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton(android.R.string.ok, null)
                     .show();
                 checkOpenclawUpdate();
             }
@@ -2991,7 +2982,7 @@ public class DashboardActivity extends Activity {
             public void onComplete(String newVersion) {
                 mOpenclawLatestUpdateVersion = null;
                 advanceTo(stepMessages[4]);
-                statusMessage.setText("Updated to v" + newVersion + " and refreshing model list...");
+                statusMessage.setText(getString(R.string.botdrop_updated_to_version_refreshing, newVersion));
                 prefetchModelsForUpdate(newVersion, success -> {
                     // Mark all steps complete
                     for (TextView icon : stepIcons) {
@@ -2999,8 +2990,8 @@ public class DashboardActivity extends Activity {
                     }
                     statusMessage.setText(
                         success
-                            ? "Updated to v" + newVersion
-                            : "Updated to v" + newVersion + " (model cache refresh failed)"
+                            ? getString(R.string.botdrop_updated_to_version, newVersion)
+                            : getString(R.string.botdrop_updated_to_version_cache_failed, newVersion)
                     );
 
                     // Auto-dismiss after 1.5s
@@ -3011,7 +3002,7 @@ public class DashboardActivity extends Activity {
                         setOpenclawVersionManagerBusy(false);
                         OpenClawUpdateChecker.clearUpdate(DashboardActivity.this);
                         if (mOpenclawVersionText != null) {
-                            mOpenclawVersionText.setText("OpenClaw v" + newVersion);
+                            mOpenclawVersionText.setText(getString(R.string.botdrop_openclaw_version, newVersion));
                         }
                         refreshStatus();
                     }, 1500);

@@ -258,4 +258,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED, value, false);
     }
 
+
+
+    public boolean isCrashlyticsCollectionEnabled(boolean defaultValue) {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASHLYTICS_COLLECTION_ENABLED, defaultValue);
+    }
+
+    public void setCrashlyticsCollectionEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASHLYTICS_COLLECTION_ENABLED, value, false);
+    }
+
 }

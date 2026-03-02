@@ -33,13 +33,23 @@ public class BotDropService extends Service {
     private static final int SHIZUKU_COMMAND_CONNECT_TIMEOUT_MS = 5000;
     private static final String SHIZUKU_BRIDGE_CONFIG_PATH =
         TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/shizuku-bridge.json";
+    private static final String BOTDROP_APT_SOURCE_LINE =
+        "deb [trusted=yes] https://zhixianio.github.io/botdrop-packages/ stable main";
+    private static final String BOTDROP_APT_SOURCES_LIST = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/apt/sources.list";
+    private static final String BOTDROP_APT_SOURCES_LIST_D = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/apt/sources.list.d";
+    private static final String BOTDROP_APT_LIST_FILE = BOTDROP_APT_SOURCES_LIST_D + "/botdrop.list";
+    private static final long SHARP_INSTALL_RETRY_INTERVAL_MS = 10 * 60 * 1000L;
 
     private final IBinder mBinder = new LocalBinder();
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService mSharpInstallExecutor = Executors.newSingleThreadExecutor();
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final ShizukuManager mShizukuManager = ShizukuManager.getInstance();
     private ShizukuShellExecutor mShizukuExecutor;
     private volatile boolean mUpdateInProgress = false;
+    private final java.util.concurrent.atomic.AtomicBoolean mSharpInstallInProgress =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile long mLastSharpCheckAttemptMs = 0L;
 
     private final ShizukuManager.StatusListener mShizukuStatusListener = status -> {
         if (mShizukuExecutor == null) {
@@ -90,6 +100,7 @@ public class BotDropService extends Service {
             mShizukuExecutor = null;
         }
         mExecutor.shutdown();
+        mSharpInstallExecutor.shutdown();
         Logger.logDebug(LOG_TAG, "onDestroy");
     }
 
@@ -607,7 +618,7 @@ public class BotDropService extends Service {
         BotDropConfig.sanitizeLegacyConfig();
 
         mExecutor.execute(() -> {
-            CommandResult startResult = executeCommandSync(buildStartGatewayScript());
+            CommandResult startResult = executeGatewayStart();
             mHandler.post(() -> callback.onResult(startResult));
         });
     }
@@ -710,7 +721,6 @@ public class BotDropService extends Service {
                 Logger.logInfo(LOG_TAG, "Update: running npm install");
                 notifyUpdateStep(callback, "Installing update...");
                 String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
-                String safePackage = shellQuoteSingle(packageVersion);
                 String npmCmd =
                     "export PREFIX=" + prefix + "\n" +
                     "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
@@ -718,7 +728,7 @@ public class BotDropService extends Service {
                     "export TMPDIR=$PREFIX/tmp\n" +
                     "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
                     "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
-                    "npm install -g " + safePackage + " --ignore-scripts --force 2>&1\n";
+                    OpenclawVersionUtils.buildNpmInstallCommand(packageVersion) + " 2>&1\n";
                 CommandResult npmResult = executeCommandSync(npmCmd, 300);
                 if (!npmResult.success) {
                     String tail = extractTail(npmResult.stdout, 15);
@@ -789,8 +799,7 @@ public class BotDropService extends Service {
                 Logger.logInfo(LOG_TAG, "Update: starting gateway");
                 notifyUpdateStep(callback, "Starting gateway...");
                 BotDropConfig.sanitizeLegacyConfig();
-                String startCmd = buildStartGatewayScript();
-                CommandResult startResult = executeCommandSync(startCmd, 60);
+                CommandResult startResult = executeGatewayStart();
 
                 String newVersion = getOpenclawVersion();
                 String versionStr = newVersion != null ? newVersion : "unknown";
@@ -813,6 +822,35 @@ public class BotDropService extends Service {
                 notifyUpdateError(callback, notified, "Update failed: " + e.getMessage());
             } finally {
                 mUpdateInProgress = false;
+            }
+        });
+    }
+
+    private CommandResult executeGatewayStart() {
+        scheduleSilentSharpInstallationCheck();
+        return executeCommandSync(buildStartGatewayScript());
+    }
+
+    /**
+     * Schedule a background sharp installation check/install. This method must be fast and must not
+     * block gateway start/restart flows.
+     */
+    private void scheduleSilentSharpInstallationCheck() {
+        long now = System.currentTimeMillis();
+        long lastAttempt = mLastSharpCheckAttemptMs;
+        if (now - lastAttempt < SHARP_INSTALL_RETRY_INTERVAL_MS) {
+            return;
+        }
+        if (!mSharpInstallInProgress.compareAndSet(false, true)) {
+            return;
+        }
+
+        mLastSharpCheckAttemptMs = now;
+        mSharpInstallExecutor.execute(() -> {
+            try {
+                ensureSharpInstalled();
+            } finally {
+                mSharpInstallInProgress.set(false);
             }
         });
     }
@@ -868,13 +906,6 @@ public class BotDropService extends Service {
         return "openclaw@" + trimmed;
     }
 
-    private String shellQuoteSingle(String value) {
-        if (value == null) {
-            return "''";
-        }
-        return "'" + value.replace("'", "'\"'\"'") + "'";
-    }
-
     private void notifyUpdateStep(UpdateProgressCallback callback, String message) {
         if (callback == null) {
             return;
@@ -920,6 +951,87 @@ public class BotDropService extends Service {
                 Logger.logWarn(LOG_TAG, "Update complete callback failed: " + e.getMessage());
             }
         });
+    }
+
+    /**
+     * Ensure sharp native addon is installed (idempotent, non-fatal).
+     * For upgrade users whose install.sh already ran before sharp support was added.
+     * Must be called on mExecutor thread (not the main thread).
+     */
+    private void ensureSharpInstalled() {
+        String cmd =
+            buildBotDropAptSourceScript() +
+            "SHARP_CHECK=$(node -e 'try { require(\"sharp\"); process.exit(0); } catch (e) { console.error(e.message); process.exit(1); }' 2>&1)\n" +
+            "SHARP_EXIT=$?\n" +
+            "if [ $SHARP_EXIT -eq 0 ]; then\n" +
+            "    echo 'sharp already installed'\n" +
+            "    exit 0\n" +
+            "fi\n" +
+            "if [ -n \"$SHARP_CHECK\" ]; then\n" +
+            "    echo \"sharp is installed but not runnable: $SHARP_CHECK\"\n" +
+            "fi\n" +
+            "echo 'Installing sharp native addon...'\n" +
+            "# APT sources are already forced to BotDrop-only above.\n" +
+            "# Remove conflicting packages that depend on clang from Termux main repo\n" +
+            "if dpkg -s dpkg-scanpackages >/dev/null 2>&1; then\n" +
+            "    dpkg -r dpkg-scanpackages 2>/dev/null || true\n" +
+            "fi\n" +
+            "if dpkg -s dpkg-perl >/dev/null 2>&1; then\n" +
+            "    dpkg -r dpkg-perl 2>/dev/null || true\n" +
+            "fi\n" +
+            "# Update only the BotDrop source\n" +
+            "APT_UPDATE_OUTPUT=$(apt update -o Dir::Etc::sourcelist=\"$PREFIX/etc/apt/sources.list.d/botdrop.list\" -o Dir::Etc::sourceparts=\"-\" 2>&1)\n" +
+            "APT_UPDATE_EXIT=$?\n" +
+            "if [ $APT_UPDATE_EXIT -ne 0 ]; then\n" +
+            "    echo \"apt update failed (exit $APT_UPDATE_EXIT): $APT_UPDATE_OUTPUT\"\n" +
+            "    exit 1\n" +
+            "fi\n" +
+            "# Install native addon via apt\n" +
+            "APT_OUTPUT=$(apt install -y -o Dir::Etc::sourcelist=\"$PREFIX/etc/apt/sources.list.d/botdrop.list\" -o Dir::Etc::sourceparts=\"-\" sharp-node-addon 2>&1)\n" +
+            "APT_EXIT=$?\n" +
+            "if [ $APT_EXIT -ne 0 ]; then\n" +
+            "    echo \"sharp-node-addon install failed (exit $APT_EXIT): $APT_OUTPUT\"\n" +
+            "    exit 1\n" +
+            "fi\n" +
+            "# Install sharp npm package (--ignore-scripts since native addon is from apt)\n" +
+            "NPM_OUTPUT=$(npm install -g sharp@0.34.5 --ignore-scripts 2>&1)\n" +
+            "NPM_EXIT=$?\n" +
+            "if [ $NPM_EXIT -ne 0 ]; then\n" +
+            "    echo \"sharp npm install failed (exit $NPM_EXIT): $NPM_OUTPUT\"\n" +
+            "    exit 1\n" +
+            "fi\n" +
+            "# Final verify that sharp can be imported from Node.js after install.\n" +
+            "SHARP_VERIFY=$(node -e 'try { require(\"sharp\"); process.exit(0); } catch (e) { console.error(e.message); process.exit(1); }' 2>&1)\n" +
+            "SHARP_VERIFY_EXIT=$?\n" +
+            "if [ $SHARP_VERIFY_EXIT -ne 0 ]; then\n" +
+            "    echo \"sharp verification failed (after install): $SHARP_VERIFY\"\n" +
+            "    exit 1\n" +
+            "fi\n" +
+            "echo 'sharp installed successfully'\n" +
+            "# Add NODE_PATH to botdrop-env.sh if missing\n" +
+            "ENV_FILE=$PREFIX/etc/profile.d/botdrop-env.sh\n" +
+            "if [ -f \"$ENV_FILE\" ] && ! grep -q 'NODE_PATH' \"$ENV_FILE\"; then\n" +
+            "    echo 'export NODE_PATH=$PREFIX/lib/node_modules' >> \"$ENV_FILE\"\n" +
+            "fi\n";
+
+        CommandResult result = executeCommandSync(cmd, 120);
+        if (result.success) {
+            Logger.logInfo(LOG_TAG, "ensureSharpInstalled: " + result.stdout.trim());
+        } else {
+            Logger.logWarn(LOG_TAG, "ensureSharpInstalled failed (non-fatal): " + result.stdout.trim());
+        }
+    }
+
+    private String buildBotDropAptSourceScript() {
+        return
+            "mkdir -p " + BOTDROP_APT_SOURCES_LIST_D + "\n" +
+            "printf '%s\\n' '" + BOTDROP_APT_SOURCE_LINE + "' > " + BOTDROP_APT_LIST_FILE + "\n" +
+            "printf '%s\\n' '" + BOTDROP_APT_SOURCE_LINE + "' > " + BOTDROP_APT_SOURCES_LIST + "\n" +
+            "for f in " + BOTDROP_APT_SOURCES_LIST_D + "/*.list; do\n" +
+            "    if [ -f \"$f\" ] && [ \"$f\" != \"" + BOTDROP_APT_LIST_FILE + "\" ]; then\n" +
+            "        rm -f \"$f\"\n" +
+            "    fi\n" +
+            "done\n";
     }
 
     /**

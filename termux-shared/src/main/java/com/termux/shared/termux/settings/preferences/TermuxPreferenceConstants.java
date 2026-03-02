@@ -180,6 +180,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED = "crash_report_notifications_enabled";
         public static final boolean DEFAULT_VALUE_CRASH_REPORT_NOTIFICATIONS_ENABLED = true;
 
+        /**
+         * Defines the key for whether Firebase Crashlytics collection is enabled or not.
+         */
+        public static final String KEY_CRASHLYTICS_COLLECTION_ENABLED = "crashlytics_collection_enabled";
+
     }
 
 

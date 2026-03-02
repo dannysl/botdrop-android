@@ -55,6 +55,10 @@ See [docs/design.md](docs/design.md) for detailed architecture.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Crash Reporting
+
+See [docs/crashlytics.md](docs/crashlytics.md) for Firebase Crashlytics setup, build behavior, and privacy notes.
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).

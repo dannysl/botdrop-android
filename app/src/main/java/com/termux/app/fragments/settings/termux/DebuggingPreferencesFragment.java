@@ -13,6 +13,8 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
+import com.termux.BuildConfig;
+import com.termux.app.CrashlyticsManager;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.logger.Logger;
 
@@ -132,6 +134,10 @@ class DebuggingPreferencesDataStore extends PreferenceDataStore {
             case "crash_report_notifications_enabled":
                 mPreferences.setCrashReportNotificationsEnabled(value);
                 break;
+            case "crashlytics_collection_enabled":
+                mPreferences.setCrashlyticsCollectionEnabled(value);
+                CrashlyticsManager.applyCollectionState(mContext);
+                break;
             default:
                 break;
         }
@@ -147,6 +153,8 @@ class DebuggingPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.arePluginErrorNotificationsEnabled(false);
             case "crash_report_notifications_enabled":
                 return mPreferences.areCrashReportNotificationsEnabled(false);
+            case "crashlytics_collection_enabled":
+                return mPreferences.isCrashlyticsCollectionEnabled(BuildConfig.CRASHLYTICS_DEFAULT_ENABLED);
             default:
                 return false;
         }
