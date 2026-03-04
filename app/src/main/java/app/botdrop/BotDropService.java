@@ -39,6 +39,7 @@ public class BotDropService extends Service {
     private static final String BOTDROP_APT_SOURCES_LIST_D = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/apt/sources.list.d";
     private static final String BOTDROP_APT_LIST_FILE = BOTDROP_APT_SOURCES_LIST_D + "/botdrop.list";
     private static final long SHARP_INSTALL_RETRY_INTERVAL_MS = 10 * 60 * 1000L;
+    private static final String BOTDROP_SHARED_ROOT = "/data/local/tmp/botdrop_tmp";
 
     private final IBinder mBinder = new LocalBinder();
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
@@ -582,6 +583,8 @@ public class BotDropService extends Service {
      */
     private String withTermuxEnv(String command) {
         return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
+               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
+               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + " && " +
                "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + " && " +
                "export PATH=$PREFIX/bin:$PATH && " +
                "export TMPDIR=$PREFIX/tmp && " +
@@ -598,6 +601,8 @@ public class BotDropService extends Service {
      */
     private String withTermuxChroot(String openclawArgs) {
         return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
+               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
+               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + " && " +
                "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + " && " +
                "export PATH=$PREFIX/bin:$PATH && " +
                "export TMPDIR=$PREFIX/tmp && " +
@@ -628,13 +633,11 @@ public class BotDropService extends Service {
 
     /**
      * Deploy built-in skills from APK assets to OpenClaw workspace.
-     * Copies assets/skills/* to ~/.openclaw/workspace/skills/
+     * Copies assets/skills/* to configured workspace/skills and compatibility fallback paths.
      * Overwrites existing files to ensure latest version.
      */
     private void deployBuiltinSkills() {
         final String SKILLS_ASSET_PREFIX = "skills";
-        final String WORKSPACE_SKILLS_DIR = TermuxConstants.TERMUX_HOME_DIR_PATH
-            + "/.openclaw/workspace/skills";
 
         try {
             String[] skillDirs = getAssets().list(SKILLS_ASSET_PREFIX);
@@ -642,14 +645,84 @@ public class BotDropService extends Service {
                 return;
             }
 
-            for (String skillName : skillDirs) {
-                copyAssetDir(SKILLS_ASSET_PREFIX + "/" + skillName,
-                    WORKSPACE_SKILLS_DIR + "/" + skillName);
+            java.util.List<String> targets = resolveBuiltinSkillsTargetRoots();
+            if (targets.isEmpty()) {
+                Logger.logWarn(LOG_TAG, "No valid target directories for built-in skills");
+                return;
             }
-            Logger.logInfo(LOG_TAG, "Deployed " + skillDirs.length + " built-in skill(s)");
+
+            for (String targetRoot : targets) {
+                for (String skillName : skillDirs) {
+                    copyAssetDir(SKILLS_ASSET_PREFIX + "/" + skillName,
+                        targetRoot + "/" + skillName);
+                }
+                Logger.logInfo(LOG_TAG, "Deployed built-in skills to: " + targetRoot);
+            }
+            Logger.logInfo(LOG_TAG, "Deployed " + skillDirs.length + " built-in skill(s) to " + targets.size()
+                + " location(s)");
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Failed to deploy built-in skills: " + e.getMessage());
         }
+    }
+
+    private java.util.List<String> resolveBuiltinSkillsTargetRoots() {
+        java.util.LinkedHashSet<String> targetRoots = new java.util.LinkedHashSet<>();
+
+        String configuredWorkspace = readOpenclawWorkspace();
+        if (!configuredWorkspace.isEmpty()) {
+            targetRoots.add(configuredWorkspace + "/skills");
+        }
+
+        // Backward-compatible destinations
+        targetRoots.add(TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/workspace/skills");
+        targetRoots.add(TermuxConstants.TERMUX_HOME_DIR_PATH + "/botdrop/skills");
+
+        return new java.util.ArrayList<>(targetRoots);
+    }
+
+    private String readOpenclawWorkspace() {
+        try {
+            org.json.JSONObject config = BotDropConfig.readConfig();
+            org.json.JSONObject agents = config.optJSONObject("agents");
+            if (agents == null) {
+                return "";
+            }
+            org.json.JSONObject defaults = agents.optJSONObject("defaults");
+            if (defaults == null) {
+                return "";
+            }
+            return normalizeWorkspacePath(defaults.optString("workspace", ""));
+        } catch (Throwable e) {
+            Logger.logWarn(LOG_TAG, "Failed to read openclaw workspace: " + e.getMessage());
+            return "";
+        }
+    }
+
+    private String normalizeWorkspacePath(String workspace) {
+        if (workspace == null) {
+            return "";
+        }
+
+        String value = workspace.trim();
+        if (value.isEmpty()) {
+            return "";
+        }
+
+        if ("~".equals(value)) {
+            return TermuxConstants.TERMUX_HOME_DIR_PATH;
+        }
+
+        if (value.startsWith("~/")) {
+            value = TermuxConstants.TERMUX_HOME_DIR_PATH + value.substring(1);
+        } else if (!value.startsWith("/")) {
+            value = TermuxConstants.TERMUX_HOME_DIR_PATH + "/" + value;
+        }
+
+        if (value.endsWith("/") && value.length() > 1) {
+            value = value.substring(0, value.length() - 1);
+        }
+
+        return value;
     }
 
     /**
@@ -1130,6 +1203,8 @@ public class BotDropService extends Service {
             "fi\n" +
             "sleep 1\n" +
             "echo '' > " + GATEWAY_LOG_FILE + "\n" +
+            "export BOTDROP_TERMUX_HOME=" + home + "\n" +
+            "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + "\n" +
             "export HOME=" + home + "\n" +
             "export PREFIX=" + prefix + "\n" +
             "export PATH=$PREFIX/bin:$PATH\n" +

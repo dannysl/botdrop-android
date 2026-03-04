@@ -1,29 +1,32 @@
-// @ts-nocheck
-export {}
+export {};
 'use strict';
 
 const path = require('path');
 const {
   getBotdropScreenshotDir,
   getBotdropUiDumpPath,
+  resolveSafeLocalTmpPath,
 } = require('./path-utils');
+const { sleep } = require('./time-utils');
+import { ErrorCode } from '../types';
+import type { UiElement, UiSelector } from '../types';
+const { SkillError } = require('./errors');
+const { quoteShellArg } = require('./shell-utils');
 
-const LOCAL_TMP_ROOT_PREFIX = '/data/local/tmp/';
+const LOCAL_TMP_ROOT = '/data/local/tmp';
 
-function quoteShellArg(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
+interface BridgeClientLike {
+  execOrThrow: (command: string, timeoutMs?: number) => Promise<{ ok: boolean; stdout?: string; [key: string]: unknown }>;
+  exec: (command: string, timeoutMs?: number) => Promise<{ ok: boolean; stdout?: string; [key: string]: unknown }>;
 }
 
-function assertLocalTmpPath(filePath, label = 'path') {
-  const normalized = path.resolve(String(filePath || '').trim());
-  if (!normalized.startsWith(LOCAL_TMP_ROOT_PREFIX)) {
-    const error = new Error(`${label} must be under /data/local/tmp`);
-    error.code = 'INVALID_PATH';
-    error.path = filePath || '';
-    throw error;
-  }
-  return normalized;
+interface UIEngineLike {
+  tap: (selector: UiSelector) => Promise<{ element: UiElement; tapped: { x: number; y: number } }>;
+  dump: () => Promise<UiElement[]>;
+  waitFor: (selector: UiSelector, timeoutMs?: number) => Promise<UiElement>;
 }
+
+const { matchesSelector } = require('./ui-engine');
 
 const KEY_MAP = {
   home: 3,
@@ -43,141 +46,152 @@ const KEY_MAP = {
   tab: 61,
   space: 62,
   escape: 111,
-};
+} as const;
+
+type KeyName = keyof typeof KEY_MAP;
 
 const CLIPBOARD_BROADCAST_ACTION = 'app.botdrop.SET_CLIPBOARD';
 
 class Actions {
-  constructor(bridgeClient, uiEngine) {
+  private readonly _bridge: BridgeClientLike;
+  private readonly _ui: UIEngineLike;
+  private readonly _keyboardPolicy: KeyboardPolicy;
+  private readonly _pathPolicy: LocalPathPolicy;
+  private readonly _parser: CommandParserLike;
+  private readonly _shell: ShellCommandLike;
+
+  constructor(bridgeClient: BridgeClientLike, uiEngine: UIEngineLike) {
     this._bridge = bridgeClient;
     this._ui = uiEngine;
+    this._keyboardPolicy = createKeyboardPolicy();
+    this._pathPolicy = createLocalTmpPathPolicy(LOCAL_TMP_ROOT);
+    this._parser = createCommandParser();
+    this._shell = createShellCommand();
   }
 
-  // ── Basic Input ──────────────────────────────────────────────────────────
-
-  async tap(x, y) {
-    const res = await this._bridge.execOrThrow(`input tap ${Math.round(x)} ${Math.round(y)}`);
+  async tap(x: number, y: number): Promise<{ ok: true; x: number; y: number }> {
+    await this._bridge.execOrThrow(`input tap ${Math.round(x)} ${Math.round(y)}`);
     return { ok: true, x: Math.round(x), y: Math.round(y) };
   }
 
-  async tapElement(selector) {
+  async tapElement(selector: UiSelector): Promise<{ element: UiElement; tapped: { x: number; y: number } }> {
     return this._ui.tap(selector);
   }
 
-  async swipe(x1, y1, x2, y2, durationMs = 300) {
+  async swipe(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    durationMs = 300
+  ): Promise<{ ok: true }> {
     await this._bridge.execOrThrow(
       `input swipe ${Math.round(x1)} ${Math.round(y1)} ${Math.round(x2)} ${Math.round(y2)} ${durationMs}`
     );
     return { ok: true };
   }
 
-  async press(key) {
-    const code = typeof key === 'number' ? key : KEY_MAP[key.toLowerCase()];
-    if (code === undefined) {
-      throw Object.assign(new Error(`Unknown key: ${key}. Valid keys: ${Object.keys(KEY_MAP).join(', ')}`), {
-        code: 'INVALID_KEY',
-      });
+  async press(key: string): Promise<{ ok: true; key: string; keycode: number }> {
+    const keycode = this._keyboardPolicy.resolveKeycode(key);
+    if (!Number.isFinite(keycode)) {
+      const err = new SkillError(
+        ErrorCode.INVALID_KEY,
+        `Unknown key: ${key}. Valid keys: ${this._keyboardPolicy.formatKeyList()}`
+      );
+      throw err;
     }
-    await this._bridge.execOrThrow(`input keyevent ${code}`);
-    return { ok: true, key, keycode: code };
+
+    await this._bridge.execOrThrow(`input keyevent ${keycode}`);
+    return { ok: true, key, keycode };
   }
 
-  // ── Text Input ───────────────────────────────────────────────────────────
-
-  /**
-   * Auto-detect: ASCII-only → input text, any non-ASCII → clipboard method.
-   */
-  async type(text) {
+  async type(text: string): Promise<{ ok: true; method: 'input-text' | 'clipboard'; text: string }> {
     const hasNonAscii = /[^\x00-\x7F]/.test(text);
     if (hasNonAscii) {
-      return this.typeViaClipboard(text);
+      await this.typeViaClipboard(text);
+      return { ok: true, method: 'clipboard', text };
     }
-    return this.typeAscii(text);
-  }
-
-  /**
-   * Force ASCII input via `input text`. Escapes shell special chars.
-   */
-  async typeAscii(text) {
-    // Escape special shell characters
-    const escaped = text.replace(/ /g, '%s');
-    await this._bridge.execOrThrow(`input text ${quoteShellArg(escaped)}`);
+    await this.typeAscii(text);
     return { ok: true, method: 'input-text', text };
   }
 
-  /**
-   * Set text via BotDrop clipboard broadcast + paste keyevent.
-   * Requires BotDrop Android ClipboardReceiver to be registered.
-   */
-  async typeViaClipboard(text) {
-    const broadcast = `am broadcast -a ${quoteShellArg(CLIPBOARD_BROADCAST_ACTION)} --es text ${quoteShellArg(text)}`;
+  async typeAscii(text: string): Promise<{ ok: true; method: 'input-text'; text: string }> {
+    const escaped = text.replace(/ /g, '%s');
+    await this._bridge.execOrThrow(`input text ${this._shell.quoteArg(escaped)}`);
+    return { ok: true, method: 'input-text', text };
+  }
+
+  async typeViaClipboard(text: string): Promise<{ ok: true; method: 'clipboard'; text: string }> {
+    const broadcast = `am broadcast -a ${this._shell.quoteArg(CLIPBOARD_BROADCAST_ACTION)} --es text ${this._shell.quoteArg(text)}`;
     await this._bridge.execOrThrow(broadcast, 10000);
-    // Small delay to ensure clipboard is set before paste
-    await sleep(200);
+    await this._shell.sleep(200);
     await this._bridge.execOrThrow(`input keyevent ${KEY_MAP.paste}`);
     return { ok: true, method: 'clipboard', text };
   }
 
-  // ── App Management ────────────────────────────────────────────────────────
+  async launch(packageName: string, activity: string | null = null): Promise<{ ok: true; packageName: string; activity: string | null }> {
+    const cmd = activity
+      ? `am start -n ${this._shell.quoteArg(`${packageName}/${activity}`)}`
+      : `monkey -p ${this._shell.quoteArg(packageName)} -c android.intent.category.LAUNCHER 1`;
 
-  async launch(packageName, activity = null) {
-    let cmd;
-    if (activity) {
-      cmd = `am start -n ${quoteShellArg(`${packageName}/${activity}`)}`;
-    } else {
-      cmd = `monkey -p ${quoteShellArg(packageName)} -c android.intent.category.LAUNCHER 1`;
-    }
     await this._bridge.execOrThrow(cmd, 15000);
     return { ok: true, packageName, activity };
   }
 
-  async kill(packageName) {
-    await this._bridge.execOrThrow(`am force-stop ${quoteShellArg(packageName)}`);
+  async kill(packageName: string): Promise<{ ok: true; packageName: string }> {
+    await this._bridge.execOrThrow(`am force-stop ${this._shell.quoteArg(packageName)}`);
     return { ok: true, packageName };
   }
 
-  async currentApp() {
+  async currentApp(): Promise<{ ok: true; packageName: string | null; activity: string | null; raw: string }> {
     const res = await this._bridge.execOrThrow(
-      `dumpsys activity top 2>/dev/null | grep -E "ACTIVITY|mCurrentFocus" | head -5`,
+      'dumpsys activity top 2>/dev/null | grep -E "ACTIVITY|mCurrentFocus|mResumed=" | head -80',
       10000
     );
-    const stdout = res.stdout || '';
 
-    // Parse package/activity from ACTIVITY line: "ACTIVITY com.pkg/.Activity"
-    const actMatch = stdout.match(/ACTIVITY\s+([a-z][a-z0-9._]+)\/([^\s]+)/i);
-    // Parse from mCurrentFocus: "mCurrentFocus=Window{... com.pkg/com.pkg.Activity}"
-    const focusMatch = stdout.match(/mCurrentFocus=Window\{[^}]+\s+([a-z][a-z0-9._]+)\/([^\s}]+)/i);
+    const stdout = String(res.stdout || '');
+    const match = this._parser.parseCurrentApp(stdout);
 
-    const match = actMatch || focusMatch;
     if (match) {
-      return { ok: true, packageName: match[1], activity: match[2], raw: stdout.trim() };
+      return {
+        ok: true,
+        packageName: match.packageName,
+        activity: match.activity,
+        raw: stdout.trim(),
+      };
     }
-    return { ok: true, packageName: null, activity: null, raw: stdout.trim() };
+
+    return {
+      ok: true,
+      packageName: null,
+      activity: null,
+      raw: stdout.trim(),
+    };
   }
 
-  async installedApps() {
-    const res = await this._bridge.execOrThrow(`pm list packages 2>/dev/null`, 20000);
-    const packages = (res.stdout || '')
-      .split('\n')
-      .map((l) => l.trim().replace(/^package:/, ''))
-      .filter(Boolean);
+  async installedApps(): Promise<{ ok: true; packages: string[] }> {
+    const res = await this._bridge.execOrThrow('pm list packages 2>/dev/null', 20000);
+    const stdout = String(res.stdout || '');
+    const packages = this._parser.parseInstalledPackages(stdout);
     return { ok: true, packages };
   }
 
-  // ── Screen ───────────────────────────────────────────────────────────────
-
-  async screenshot(outputPath = null) {
+  async screenshot(outputPath: string | null = null): Promise<{ ok: true; path: string; androidPath: string; requestedPath: string | null }> {
     const screenshotDir = getBotdropScreenshotDir();
     const defaultDest = path.join(screenshotDir, 'shizuku-screenshot.png');
     const requestedDest = typeof outputPath === 'string' && outputPath.trim() ? outputPath.trim() : null;
     const dest = requestedDest || defaultDest;
-    const safeDest = assertLocalTmpPath(dest, 'Screenshot output path');
+    const safeDest = this._pathPolicy.assertLocalTmpPath(dest, 'Screenshot output path');
+
     const tmpAndroid = getBotdropUiDumpPath('shizuku-shot.png');
     const tmpAndroidDir = path.dirname(tmpAndroid);
 
-    await this._bridge.execOrThrow(`mkdir -p ${quoteShellArg(tmpAndroidDir)} ${quoteShellArg(path.dirname(safeDest))}`);
-    await this._bridge.execOrThrow(`screencap -p ${quoteShellArg(tmpAndroid)}`, 15000);
-    await this._bridge.execOrThrow(`cp ${quoteShellArg(tmpAndroid)} ${quoteShellArg(safeDest)} 2>/dev/null || cat ${quoteShellArg(tmpAndroid)} > ${quoteShellArg(safeDest)}`, 10000);
+    await this._bridge.execOrThrow(`mkdir -p ${this._shell.quoteArg(tmpAndroidDir)} ${this._shell.quoteArg(path.dirname(safeDest))}`);
+    await this._bridge.execOrThrow(`screencap -p ${this._shell.quoteArg(tmpAndroid)}`, 15000);
+    await this._bridge.execOrThrow(
+      `cp ${this._shell.quoteArg(tmpAndroid)} ${this._shell.quoteArg(safeDest)} 2>/dev/null || cat ${this._shell.quoteArg(tmpAndroid)} > ${this._shell.quoteArg(safeDest)}`,
+      10000
+    );
 
     return {
       ok: true,
@@ -187,76 +201,234 @@ class Actions {
     };
   }
 
-  async screenSize() {
-    const res = await this._bridge.execOrThrow(`wm size`);
-    const m = res.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
-    if (m) {
-      return { ok: true, width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
-    }
-    const m2 = res.stdout.match(/(\d+)x(\d+)/);
-    if (m2) {
-      return { ok: true, width: parseInt(m2[1], 10), height: parseInt(m2[2], 10) };
-    }
-    return { ok: true, width: null, height: null, raw: res.stdout.trim() };
+  async screenSize(): Promise<{ ok: true; width: number | null; height: number | null; raw?: string }> {
+    const res = await this._bridge.execOrThrow('wm size');
+    const stdout = String(res.stdout || '');
+    const parsed = this._parser.parseScreenSize(stdout);
+    return {
+      ok: true,
+      width: parsed.width,
+      height: parsed.height,
+      raw: parsed.raw,
+    };
   }
 
-  // ── Device Info ───────────────────────────────────────────────────────────
-
-  async deviceInfo() {
+  async deviceInfo(): Promise<{ ok: true; model: string; androidVersion: string; sdkVersion: string; manufacturer: string }> {
     const res = await this._bridge.execOrThrow(
-      `getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.manufacturer`,
+      'getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.manufacturer',
       10000
     );
-    const lines = (res.stdout || '').split('\n').map((l) => l.trim());
+    const parsed = this._parser.parseDeviceInfo(String(res.stdout || ''));
     return {
       ok: true,
-      model: lines[0] || '',
-      androidVersion: lines[1] || '',
-      sdkVersion: lines[2] || '',
-      manufacturer: lines[3] || '',
+      model: parsed.model,
+      androidVersion: parsed.androidVersion,
+      sdkVersion: parsed.sdkVersion,
+      manufacturer: parsed.manufacturer,
     };
   }
 
-  async batteryInfo() {
-    const res = await this._bridge.execOrThrow(`dumpsys battery 2>/dev/null | head -20`, 10000);
-    const stdout = res.stdout || '';
-    const get = (key) => {
-      const m = stdout.match(new RegExp(key + ':\\s*(\\S+)'));
-      return m ? m[1] : null;
-    };
+  async batteryInfo(): Promise<{ ok: true; level: string | null; charging: boolean; temperature: string | null; raw: string }> {
+    const res = await this._bridge.execOrThrow('dumpsys battery 2>/dev/null | head -20', 10000);
+    const stdout = String(res.stdout || '');
+    const parsed = this._parser.parseBatteryInfo(stdout);
+
     return {
       ok: true,
-      level: get('level'),
-      charging: get('status') === '2',
-      temperature: get('temperature'),
+      level: parsed.level,
+      charging: parsed.charging,
+      temperature: parsed.temperature,
       raw: stdout.trim(),
     };
   }
 
-  // ── UI Helpers ─────────────────────────────────────────────────────────────
-
-  async uiDump(filterSelector = null) {
+  async uiDump(filterSelector: UiSelector | null = null): Promise<UiElement[]> {
     const elements = await this._ui.dump();
     if (filterSelector) {
-      const { matchesSelector } = require('./ui-engine');
       return elements.filter((el) => matchesSelector(el, filterSelector));
     }
     return elements;
   }
 
-  async waitFor(selector, timeoutMs = 10000) {
+  async waitFor(selector: UiSelector, timeoutMs = 10000): Promise<UiElement> {
     return this._ui.waitFor(selector, timeoutMs);
   }
 
-  // ── Raw Exec ───────────────────────────────────────────────────────────────
-
-  async exec(command, timeoutMs = 30000) {
+  async exec(command: string, timeoutMs = 30000): Promise<{ ok: boolean; [key: string]: unknown }> {
     return this._bridge.exec(command, timeoutMs);
   }
 }
+interface KeyboardPolicy {
+  resolveKeycode(rawKey: string): number;
+  formatKeyList(): string;
+}
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+interface LocalPathPolicy {
+  assertLocalTmpPath(filePath: string, label?: string): string;
+}
+
+interface CommandParserLike {
+  parseCurrentApp(stdout: string): { packageName: string | null; activity: string | null } | null;
+  parseInstalledPackages(stdout: string): string[];
+  parseScreenSize(stdout: string): { width: number | null; height: number | null; raw: string };
+  parseDeviceInfo(stdout: string): { model: string; androidVersion: string; sdkVersion: string; manufacturer: string };
+  parseBatteryInfo(stdout: string): { level: string | null; charging: boolean; temperature: string | null };
+}
+
+interface ShellCommandLike {
+  quoteArg(value: string): string;
+  sleep(ms: number): Promise<void>;
+}
+
+function createKeyboardPolicy(): KeyboardPolicy {
+  const keyMap = KEY_MAP;
+
+  return {
+    resolveKeycode(rawKey: string): number {
+      const normalized = rawKey.toLowerCase();
+      const numeric = Number(normalized);
+      return Number.isFinite(numeric) ? numeric : keyMap[normalized as KeyName];
+    },
+    formatKeyList() {
+      return Object.keys(keyMap).join(', ');
+    },
+  };
+}
+
+function createLocalTmpPathPolicy(root: string): LocalPathPolicy {
+  return {
+    assertLocalTmpPath(filePath: string, label = 'path'): string {
+      const resolved = resolveSafeLocalTmpPath(filePath, root);
+      if (!resolved.ok) {
+        const err = new SkillError(ErrorCode.INVALID_PATH, `${label} is not safe under ${root}`, {
+          path: filePath,
+          resolved,
+        });
+        throw err;
+      }
+
+      return resolved.path;
+    },
+  };
+}
+
+function createCommandParser(): CommandParserLike {
+  return {
+    parseCurrentApp(stdout: string) {
+      const lines = String(stdout || '').split('\n');
+      let resumeCandidate: { packageName: string | null; activity: string | null } | null = null;
+      const fallbackCandidates: Array<{ packageName: string | null; activity: string | null }> = [];
+      let currentActivity: { packageName: string | null; activity: string | null } | null = null;
+
+      for (const rawLine of lines) {
+        const line = String(rawLine || '');
+        const actMatch = line.match(/^\s*ACTIVITY\s+([^/\s]+)\/([^\s]+)/i);
+        if (actMatch) {
+          if (currentActivity && !fallbackCandidates.includes(currentActivity)) {
+            fallbackCandidates.push(currentActivity);
+          }
+          currentActivity = {
+            packageName: actMatch[1] || null,
+            activity: actMatch[2] || null,
+          };
+          continue;
+        }
+
+        if (currentActivity && /mResumed=true/.test(line)) {
+          resumeCandidate = currentActivity;
+          if (!fallbackCandidates.includes(currentActivity)) {
+            fallbackCandidates.push(currentActivity);
+          }
+        }
+      }
+
+      if (currentActivity && !fallbackCandidates.includes(currentActivity)) {
+        fallbackCandidates.push(currentActivity);
+      }
+
+      if (resumeCandidate) {
+        return resumeCandidate;
+      }
+
+      const focusMatch = stdout.match(/mCurrentFocus=Window\{[^}]+\s+([^/\s]+)\/([^\s}]+)/i);
+      if (focusMatch) {
+        return {
+          packageName: focusMatch[1] || null,
+          activity: focusMatch[2] || null,
+        };
+      }
+
+      if (fallbackCandidates.length > 0) {
+        return fallbackCandidates[fallbackCandidates.length - 1];
+      }
+
+      return null;
+    },
+    parseInstalledPackages(stdout: string) {
+      return stdout
+        .split('\n')
+        .map((entry) => String(entry || '').trim().replace(/^package:/, ''))
+        .filter(Boolean);
+    },
+    parseScreenSize(stdout: string) {
+      const m = stdout.match(/Physical size:\\s*(\\d+)x(\\d+)/);
+      if (m) {
+        return {
+          width: toPositiveInteger(m[1]),
+          height: toPositiveInteger(m[2]),
+          raw: stdout.trim(),
+        };
+      }
+
+      const m2 = stdout.match(/(\\d+)x(\\d+)/);
+      if (m2) {
+        return {
+          width: toPositiveInteger(m2[1]),
+          height: toPositiveInteger(m2[2]),
+          raw: stdout.trim(),
+        };
+      }
+
+      return { width: null, height: null, raw: stdout.trim() };
+    },
+    parseDeviceInfo(stdout: string) {
+      const lines = String(stdout || '').split('\n').map((line) => String(line || '').trim());
+      return {
+        model: lines[0] || '',
+        androidVersion: lines[1] || '',
+        sdkVersion: lines[2] || '',
+        manufacturer: lines[3] || '',
+      };
+    },
+    parseBatteryInfo(stdout: string) {
+      const getValue = (key: string): string | null => {
+        const m = stdout.match(new RegExp(key + ':\\s*(\\S+)'));
+        return m ? m[1] : null;
+      };
+
+      return {
+        level: getValue('level'),
+        charging: getValue('status') === '2',
+        temperature: getValue('temperature'),
+      };
+    },
+  };
+}
+
+function toPositiveInteger(raw: string): number | null {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function createShellCommand(): ShellCommandLike {
+  return {
+    quoteArg(value: string): string {
+      return quoteShellArg(value);
+    },
+    sleep(ms: number): Promise<void> {
+      return sleep(ms);
+    },
+  };
 }
 
 module.exports = { Actions };

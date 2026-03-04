@@ -39,6 +39,8 @@ public class ShellService extends Service {
 
     private static final String LOG_TAG = "ShizukuShellService";
     private static final int DEFAULT_TIMEOUT_MS = 30000;
+    private static final String FALLBACK_SHARED_ROOT = "/data/local/tmp/botdrop_tmp";
+    private static final String FALLBACK_TERMUX_HOME = "/data/data/app.botdrop/files/home";
 
     private final ExecutorService mStreamExecutor = Executors.newCachedThreadPool();
 
@@ -238,7 +240,67 @@ public class ShellService extends Service {
     }
 
     private String ensureTermuxEnvironment(String command) {
-        return command == null ? "" : command;
+        String payload = command == null ? "" : command;
+        String sharedRoot = resolveSharedRoot();
+        String termuxHome = resolveTermuxHome();
+        if (termuxHome == null || sharedRoot == null) {
+            return payload;
+        }
+
+        final String quotedRoot = quoteShellArg(sharedRoot);
+        final String quotedHome = quoteShellArg(termuxHome);
+        return "export BOTDROP_SHARED_ROOT=" + quotedRoot
+            + "; export BOTDROP_TERMUX_HOME=" + quotedHome
+            + "; export HOME=" + quotedHome
+            + "; cd " + quotedRoot + "; " + payload;
+    }
+
+    private String resolveSharedRoot() {
+        final String[] candidates = new String[]{
+            System.getenv("BOTDROP_SHARED_ROOT"),
+            "/data/local/tmp/botdrop_tmp",
+            FALLBACK_SHARED_ROOT,
+        };
+
+        for (final String candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            String trimmed = candidate.trim();
+            if (!trimmed.startsWith("/data/local/tmp/") &&
+                !trimmed.equals("/data/local/tmp")) {
+                continue;
+            }
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return FALLBACK_SHARED_ROOT;
+    }
+
+    private String resolveTermuxHome() {
+        final String[] candidates = new String[]{
+            System.getenv("BOTDROP_TERMUX_HOME"),
+            System.getenv("TERMUX_HOME"),
+            System.getenv("HOME"),
+            FALLBACK_TERMUX_HOME,
+        };
+
+        for (final String candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            final String trimmed = candidate.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return FALLBACK_TERMUX_HOME;
+    }
+
+    private String quoteShellArg(String value) {
+        String safe = value == null ? "" : value;
+        return "'" + safe.replace("'", "'\\''") + "'";
     }
 
     private Callable<String> readProcessOutput(InputStream inputStream) {

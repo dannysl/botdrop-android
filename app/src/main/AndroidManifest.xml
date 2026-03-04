@@ -268,7 +268,7 @@
 
 
         <!-- Clipboard receiver for shizuku-automation OpenClaw skill.
-             Allows setting clipboard via: am broadcast -a app.botdrop.SET_CLIPBOARD --es text "..." -->
+             Allows setting clipboard via: am broadcast -a app.botdrop.SET_CLIPBOARD minus-option text "..." -->
         <receiver
             android:name=".botdrop.ClipboardReceiver"
             android:exported="true">

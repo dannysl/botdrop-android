@@ -45,3 +45,6 @@ keystore/
 
 # Worktrees
 .worktrees/
+
+# Skill TypeScript build output
+app/src/main/assets/skills/shizuku-automation/dist/

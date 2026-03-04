@@ -1,447 +1,436 @@
-// @ts-nocheck
-export {}
+export {};
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const { getBotdropTmpDir } = require('./path-utils');
+import * as http from 'http';
+const { BridgeConfigResolver } = require('./bridge-config-resolver');
 
-const DEFAULT_SHARED_HOME = '/data/local/tmp/botdrop_tmp';
-const FALLBACK_TERMUX_HOME = '/data/data/com.termux/files/home';
-const SHARED_ROOT_CANDIDATES = [
-  DEFAULT_SHARED_HOME,
-];
-const TERMUX_HOME_CANDIDATES = [
-  process.env.BOTDROP_TERMUX_HOME,
-  process.env.TERMUX_HOME,
-  process.env.HOME,
-  '/data/data/app.botdrop/files/home',
-  '/data/data/app.botdrop/files/usr/home',
-  FALLBACK_TERMUX_HOME,
-];
-const BRIDGE_CONFIG_RELATIVE_PATH = path.join('.openclaw', 'shizuku-bridge.json');
+import type {
+  BridgeClientConfigInfo,
+  BridgeConfig as SkillBridgeConfig,
+  BridgeResponseUnion,
+} from '../types';
+const { ErrorCode } = require('../types');
+const { SkillError } = require('./errors');
 
-function isSharedDirectoryCandidate(candidate = '') {
-  const normalized = String(candidate || '').trim();
-  return (
-    normalized.startsWith('/data/local/tmp/')
-  );
-}
-
-function resolveAutomationHome() {
-  const candidateSet = [
-    process.env.BOTDROP_AUTOMATION_HOME,
-    getBotdropTmpDir(),
-    ...SHARED_ROOT_CANDIDATES,
-  ];
-  const candidates = [];
-  const seen = new Set();
-  for (const candidate of candidateSet) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
-    if (!isSharedDirectoryCandidate(candidate)) continue;
-    candidates.push(candidate);
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-    try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-        return candidate;
-      }
-    } catch {
-      // skip
-    }
-  }
-  return DEFAULT_SHARED_HOME;
-}
-
-function isTermuxHomeCandidate(candidate = '') {
-  const normalized = String(candidate || '').trim();
-  return normalized.startsWith('/data/data/');
-}
-
-function resolveTermuxHome() {
-  const candidates = [...TERMUX_HOME_CANDIDATES];
-  const seen = new Set();
-
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) {
-      continue;
-    }
-    seen.add(candidate);
-    if (!isTermuxHomeCandidate(candidate)) {
-      continue;
-    }
-    try {
-      fs.accessSync(candidate, fs.constants.R_OK);
-      return candidate;
-    } catch (_) {
-      // best effort, continue searching
-    }
-  }
-  return FALLBACK_TERMUX_HOME;
-}
-
-const AUTOMATION_HOME = resolveAutomationHome();
-const TERMUX_HOME = resolveTermuxHome();
-const FALLBACK_CONFIG_PATH = path.join(TERMUX_HOME, BRIDGE_CONFIG_RELATIVE_PATH);
-
-function collectCandidateConfigPaths() {
-  const candidates = [];
-  const seen = new Set();
-  const directCandidates = [
-    process.env.BOTDROP_SHIZUKU_BRIDGE_CONFIG_PATH,
-    process.env.SHIZUKU_BRIDGE_CONFIG_PATH,
-  ];
-
-  const addUniqueCandidate = (candidate) => {
-    if (!candidate) {
-      return;
-    }
-    const normalized = String(candidate);
-    if (seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    candidates.push(normalized);
-  };
-
-  const addHomeCandidate = (home) => {
-    if (!home) {
-      return;
-    }
-    const normalized = String(home || '').trim();
-    if (!normalized) {
-      return;
-    }
-    addUniqueCandidate(path.join(normalized, BRIDGE_CONFIG_RELATIVE_PATH));
-    const parentHome = path.dirname(normalized);
-    if (parentHome && parentHome !== normalized) {
-      addUniqueCandidate(path.join(parentHome, BRIDGE_CONFIG_RELATIVE_PATH));
-    }
-  };
-
-  directCandidates.forEach(addUniqueCandidate);
-
-  const termuxHomes = [TERMUX_HOME, ...TERMUX_HOME_CANDIDATES];
-  for (const home of termuxHomes) {
-    if (!home || seen.has(home)) {
-      continue;
-    }
-    addHomeCandidate(home);
-  }
-
-  const sharedHomeCandidates = [AUTOMATION_HOME, ...SHARED_ROOT_CANDIDATES];
-  for (const home of sharedHomeCandidates) {
-    if (!home || seen.has(home)) {
-      continue;
-    }
-    addHomeCandidate(home);
-  }
-
-  addUniqueCandidate(FALLBACK_CONFIG_PATH);
-  return candidates;
-}
-
-const CANDIDATE_CONFIG_PATHS = collectCandidateConfigPaths();
-
-function getDefaultConfigPath() {
-  const candidates = [...CANDIDATE_CONFIG_PATHS];
-  const defaultPath = candidates.find((candidate) => {
-    try {
-      return fs.existsSync(candidate);
-    } catch {
-      return false;
-    }
-  });
-  if (defaultPath) {
-    return defaultPath;
-  }
-  return FALLBACK_CONFIG_PATH;
-}
-
-const DEFAULT_CONFIG_PATH = getDefaultConfigPath();
-
-const ERROR = {
-  BRIDGE_NOT_FOUND: 'BRIDGE_NOT_FOUND',
-  BRIDGE_UNREACHABLE: 'BRIDGE_UNREACHABLE',
-  SHIZUKU_NOT_READY: 'SHIZUKU_NOT_READY',
-  EXEC_FAILED: 'EXEC_FAILED',
-  TIMEOUT: 'TIMEOUT',
+type BridgeResponse = BridgeResponseUnion & Record<string, unknown>;
+type BridgeResponseFailure = BridgeResponse & { ok: false };
+type BridgeResponseSuccess = BridgeResponse & { ok: true };
+type ErrorWithResult = Error & {
+  code: string;
+  result: BridgeResponse;
 };
 
-function normalizeBridgeResponse(payload = {}) {
-  if (!payload || typeof payload !== 'object') {
-    return {
-      ok: false,
-      error: ERROR.EXEC_FAILED,
-      message: 'Invalid response payload',
-      exitCode: -1,
-      stdout: '',
-      stderr: '',
-      type: 'text',
-    };
-  }
-
-  const type = payload.type === 'file' ? 'file' : 'text';
-  return {
-    ...payload,
-    type,
-    stdout: type === 'file' ? (payload.stdout || '') : (payload.stdout || ''),
-    stderr: payload.stderr || '',
-  };
-}
+const ERROR = {
+  BRIDGE_NOT_FOUND: ErrorCode.BRIDGE_NOT_FOUND,
+  BRIDGE_UNREACHABLE: ErrorCode.BRIDGE_UNREACHABLE,
+  SHIZUKU_NOT_READY: ErrorCode.SHIZUKU_NOT_READY,
+  EXEC_FAILED: ErrorCode.EXEC_FAILED,
+  TIMEOUT: ErrorCode.TIMEOUT,
+};
 
 const TRACE_BRIDGE =
   !('BOTDROP_AUTOMATION_TRACE' in process.env)
   || process.env.BOTDROP_AUTOMATION_TRACE === '1'
   || process.env.BOTDROP_AUTOMATION_TRACE === 'true';
 
-function traceBridge(event, data = {}) {
-  if (!TRACE_BRIDGE) {
-    return;
-  }
-  console.error('[shizuku-bridge][' + event + '] ' + JSON.stringify(data));
+interface BridgeAvailabilityResult {
+  available: boolean;
+  status?: string;
+  serviceBound?: boolean;
+  error?: string;
+  message?: string;
 }
 
-function summarizeCommand(command) {
-  if (!command) return '';
-  const normalized = String(command);
-  if (normalized.length <= 120) return normalized;
-  return normalized.slice(0, 120) + '...(' + normalized.length + ')';
+interface BridgeConfigStore {
+  getConfigPath(): string;
+  readConfig: () => SkillBridgeConfig | null;
+  getConfigInfo: () => ConfigInfo;
 }
 
-class BridgeClient {
-  constructor(configPath) {
-    this._configPath = configPath || DEFAULT_CONFIG_PATH;
-    this._lastConfigError = null;
-  }
+interface ConfigInfo {
+  path: string;
+  exists: boolean;
+  home: string | null;
+  cwd: string;
+  lastError: string | null;
+}
 
-  _readConfig() {
-    this._lastConfigError = null;
-    try {
-      const raw = fs.readFileSync(this._configPath, 'utf8');
-      const cfg = JSON.parse(raw);
-      if (!cfg.host || !cfg.port || !cfg.token) {
-        this._lastConfigError = 'Invalid config format: host/port/token missing';
-        return null;
-      }
-      return cfg;
-    } catch (error) {
-      this._lastConfigError = error.message || String(error);
-      return null;
+const BRIDGE_DIAGNOSTICS = {
+  enabled: TRACE_BRIDGE,
+  summarizeCommand(command: string): string {
+    const normalized = String(command || '').trim();
+    if (normalized.length <= 120) {
+      return normalized;
     }
+    return normalized.slice(0, 120) + `...(${normalized.length})`;
+  },
+  toStringMap(value: Record<string, unknown>): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (typeof item === 'string') {
+        result[key] = item;
+      }
+    }
+    return result;
+  },
+  trace(event: string, data: Record<string, unknown> = {}): void {
+    if (!BRIDGE_DIAGNOSTICS.enabled) {
+      return;
+    }
+    console.error('[shizuku-bridge][' + event + '] ' + JSON.stringify(data));
+  },
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function createFailureResponse(error: string, message: string): BridgeResponseFailure {
+  return {
+    ok: false,
+    error,
+    message,
+    exitCode: -1,
+    stdout: '',
+    stderr: '',
+    type: 'text',
+  };
+}
+
+function normalizeBridgeResponse(payload: unknown = {}): BridgeResponse {
+  if (!isObject(payload)) {
+    return createFailureResponse(ERROR.EXEC_FAILED, 'Invalid response payload');
   }
 
-  getConfigInfo() {
-    const exists = (() => {
-      try {
-        return fs.existsSync(this._configPath);
-      } catch {
-        return false;
-      }
-    })();
+  const normalizedPayload = payload as Record<string, unknown>;
+  const type = normalizedPayload.type === 'file' ? 'file' : 'text';
+  const rawError = typeof normalizedPayload.error === 'string' ? normalizedPayload.error : ERROR.EXEC_FAILED;
+  const rawMessage = typeof normalizedPayload.message === 'string' && normalizedPayload.message.length > 0
+    ? normalizedPayload.message
+    : rawError === ERROR.EXEC_FAILED
+      ? 'Execution failed'
+      : `Bridge error: ${rawError}`;
 
+  const exitCode = typeof normalizedPayload.exitCode === 'number' ? normalizedPayload.exitCode : -1;
+  const stdout = typeof normalizedPayload.stdout === 'string' ? normalizedPayload.stdout : '';
+  const stderr = typeof normalizedPayload.stderr === 'string' ? normalizedPayload.stderr : '';
+  const isFileType = type === 'file';
+
+  if (isFileType) {
+    const filePath = typeof normalizedPayload.path === 'string' ? normalizedPayload.path : '';
+    if (!filePath) {
+      return createFailureResponse(
+        ERROR.EXEC_FAILED,
+        'Bridge returned file result without path',
+      );
+    }
+    const normalized: Extract<BridgeResponseUnion, { type: 'file' }> = {
+      ok: payload.ok === true,
+      error: rawError,
+      message: rawMessage,
+      exitCode,
+      stdout,
+      stderr,
+      type,
+      path: filePath,
+    };
+    const bytes = typeof normalizedPayload.bytes === 'number' && Number.isFinite(normalizedPayload.bytes)
+      ? normalizedPayload.bytes
+      : undefined;
+    if (bytes !== undefined) {
+      normalized.bytes = bytes;
+    }
     return {
-      path: this._configPath,
-      exists,
-      home: AUTOMATION_HOME || null,
-      cwd: process.cwd(),
-      lastError: this._lastConfigError,
+      ...normalizedPayload,
+      ...normalized,
     };
   }
 
-  getConfigPath() {
-    return this._configPath;
+  const normalized: Extract<BridgeResponseUnion, { type: 'text' }> = {
+    ok: payload.ok === true,
+    error: rawError,
+    message: rawMessage,
+    exitCode,
+    stdout,
+    stderr,
+    type,
+  };
+
+  return {
+    ...normalizedPayload,
+    ...normalized,
+  };
+}
+
+function isBridgeResponse(payload: unknown): payload is BridgeResponse {
+  return isObject(payload) && (payload.type === 'text' || payload.type === 'file') && 'ok' in payload;
+}
+
+function requestBridge(
+  method: 'GET' | 'POST',
+  requestPath: string,
+  body: unknown,
+  timeoutMs: number,
+  configStore: BridgeConfigStore
+): Promise<BridgeResponse> {
+  const resolvedTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000;
+  const cfg = configStore.readConfig();
+
+  if (!cfg) {
+    const info = configStore.getConfigInfo();
+    const notFound = createFailureResponse(
+      ERROR.BRIDGE_NOT_FOUND,
+      `Bridge config not found at ${info.path}`,
+    ) as BridgeResponseFailure;
+    notFound.bridgeConfigPath = info.path;
+    notFound.bridgeConfigExists = info.exists;
+    notFound.bridgeConfigHome = info.home;
+    notFound.bridgeConfigCwd = info.cwd;
+    notFound.bridgeConfigLastError = info.lastError;
+    return Promise.resolve(notFound);
   }
 
-  _request(method, path, body, timeoutMs) {
-    const requestId = Math.random().toString(36).slice(2, 10);
-    const cfg = this._readConfig();
-    if (!cfg) {
-      const info = this.getConfigInfo();
-      return Promise.resolve({
+  return new Promise((resolve) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const startedAt = Date.now();
+
+    const options: http.RequestOptions = {
+      hostname: cfg.host,
+      port: cfg.port,
+      path: requestPath,
+      method,
+      timeout: resolvedTimeout,
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        ...(payload
+          ? {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload),
+            }
+          : {}),
+      },
+    };
+
+    BRIDGE_DIAGNOSTICS.trace('request.start', {
+      requestId: Math.random().toString(36).slice(2, 10),
+      method,
+      path: requestPath,
+      timeoutMs: resolvedTimeout,
+      hasBody: !!payload,
+      bridgeConfigPath: configStore.getConfigPath(),
+      command: BRIDGE_DIAGNOSTICS.summarizeCommand(
+        typeof body === 'object' && body && 'command' in body
+          ? String((body as { command?: unknown }).command || '')
+          : '',
+      ),
+    });
+
+    const req = http.request(options, (res: http.IncomingMessage) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        const elapsedMs = Date.now() - startedAt;
+        BRIDGE_DIAGNOSTICS.trace('response.raw', {
+          statusCode: res.statusCode,
+          headers: BRIDGE_DIAGNOSTICS.toStringMap(res.headers as Record<string, unknown>),
+          elapsedMs,
+          rawLen: raw.length,
+        });
+
+        let parsed: BridgeResponse;
+        try {
+          const rawParsed: unknown = JSON.parse(raw);
+          parsed = normalizeBridgeResponse(rawParsed);
+        } catch {
+          parsed = createFailureResponse(
+            ERROR.EXEC_FAILED,
+            `Invalid JSON response: ${raw.slice(0, 200)}`,
+          );
+        }
+
+        if (!isBridgeResponse(parsed)) {
+          resolve(normalizeBridgeResponse({
+            ok: false,
+            error: ERROR.EXEC_FAILED,
+            message: 'Invalid response payload',
+            exitCode: -1,
+            stdout: '',
+            stderr: '',
+          }));
+          return;
+        }
+
+        BRIDGE_DIAGNOSTICS.trace('response.parsed', {
+          method,
+          requestPath,
+          elapsedMs,
+          ok: parsed.ok,
+          exitCode: parsed.exitCode,
+          type: parsed.type,
+          stdoutLen: parsed.type === 'file' && typeof parsed.bytes === 'number'
+            ? parsed.bytes
+            : parsed.stdout.length,
+          stderrLen: parsed.stderr.length,
+          resolvedPath: parsed.type === 'file' ? parsed.path : null,
+        });
+
+        resolve(parsed);
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      BRIDGE_DIAGNOSTICS.trace('request.timeout', {
+        method,
+        path: requestPath,
+        timeoutMs: resolvedTimeout,
+        elapsedMs: Date.now() - startedAt,
+      });
+      resolve(normalizeBridgeResponse({
         ok: false,
-        error: ERROR.BRIDGE_NOT_FOUND,
-        message: 'Bridge config not found at ' + info.path,
-        type: 'text',
-        bridgeConfigPath: info.path,
-        bridgeConfigExists: info.exists,
-        bridgeConfigHome: info.home,
-        bridgeConfigCwd: info.cwd,
-        bridgeConfigLastError: info.lastError,
+        error: ERROR.TIMEOUT,
+        message: `Request timed out after ${resolvedTimeout}ms`,
         exitCode: -1,
         stdout: '',
         stderr: '',
-      });
-    }
-
-    return new Promise((resolve) => {
-      const payload = body ? JSON.stringify(body) : null;
-      const startedAt = Date.now();
-      const options = {
-        hostname: cfg.host,
-        port: cfg.port,
-        path,
-        method,
-        timeout: timeoutMs || 30000,
-        headers: {
-          Authorization: 'Bearer ' + cfg.token,
-          ...(payload
-            ? {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(payload),
-              }
-            : {}),
-        },
-      };
-
-      traceBridge('request.start', {
-        requestId,
-        method,
-        path,
-        timeoutMs: timeoutMs || 30000,
-        hasBody: !!payload,
-        bridgeConfigPath: this._configPath,
-        command: summarizeCommand(body && body.command),
-      });
-
-      const req = http.request(options, (res) => {
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf8');
-          const elapsedMs = Date.now() - startedAt;
-          traceBridge('response.raw', {
-            requestId,
-            statusCode: res.statusCode,
-            headers: res.headers,
-            elapsedMs,
-            rawLen: raw.length,
-          });
-          try {
-            const rawParsed = JSON.parse(raw);
-            const parsed = normalizeBridgeResponse(rawParsed);
-            traceBridge('response.parsed', {
-              requestId,
-              method,
-              path,
-              elapsedMs,
-              ok: !!parsed.ok,
-              exitCode: parsed.exitCode,
-              type: parsed.type,
-              stdoutLen:
-                parsed.type === 'file'
-                  ? Number.isFinite(parsed.bytes) ? parsed.bytes : 0
-                  : parsed.stdout ? parsed.stdout.length : 0,
-              stderrLen: parsed.stderr ? parsed.stderr.length : 0,
-              path: parsed.path || null,
-            });
-            resolve(parsed);
-          } catch {
-            resolve(
-              normalizeBridgeResponse({
-                ok: false,
-                error: ERROR.EXEC_FAILED,
-                message: 'Invalid JSON response: ' + raw.slice(0, 200),
-                exitCode: -1,
-                stdout: '',
-                stderr: '',
-              })
-            );
-          }
-        });
-      });
-
-        req.on('timeout', () => {
-        req.destroy();
-        traceBridge('request.timeout', {
-          requestId,
-          method,
-          path,
-          timeoutMs: timeoutMs || 30000,
-          elapsedMs: Date.now() - startedAt,
-        });
-        resolve({
-          ok: false,
-          error: ERROR.TIMEOUT,
-          message: 'Request timed out after ' + (timeoutMs || 30000) + 'ms',
-          exitCode: -1,
-          stdout: '',
-          stderr: '',
-          type: 'text',
-        });
-      });
-
-      req.on('error', (err) => {
-        traceBridge('request.error', {
-          requestId,
-          method,
-          path,
-          elapsedMs: Date.now() - startedAt,
-          error: err.message,
-        });
-        resolve({
-          ok: false,
-          error: ERROR.BRIDGE_UNREACHABLE,
-          message: 'Bridge unreachable: ' + err.message,
-          exitCode: -1,
-          stdout: '',
-          stderr: '',
-          type: 'text',
-        });
-      });
-
-      if (payload) req.write(payload);
-      req.end();
+        type: 'text',
+      }));
     });
+
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      BRIDGE_DIAGNOSTICS.trace('request.error', {
+        method,
+        path: requestPath,
+        elapsedMs: Date.now() - startedAt,
+        error: err.message,
+      });
+      resolve(createFailureResponse(
+        ERROR.BRIDGE_UNREACHABLE,
+        `Bridge unreachable: ${err.message}`,
+      ));
+    });
+
+    if (payload) {
+      req.write(payload);
+    }
+    req.end();
+  });
+}
+
+const GLOBAL_CONFIG_RESOLVER = new BridgeConfigResolver();
+const DEFAULT_CONFIG_PATH = GLOBAL_CONFIG_RESOLVER.getDefaultConfigPath();
+
+class BridgeClient {
+  private readonly _configStore: BridgeConfigStore;
+
+  constructor(configPath?: string) {
+    this._configStore = new BridgeConfigResolver(configPath);
   }
 
-  async isAvailable() {
-    const cfg = this._readConfig();
+  getConfigPath(): string {
+    return this._configStore.getConfigPath();
+  }
+
+  getConfigInfo(): BridgeClientConfigInfo {
+    const raw = this._configStore.getConfigInfo();
+    return {
+      path: raw.path,
+      exists: raw.exists,
+      home: raw.home,
+      cwd: raw.cwd,
+      lastError: raw.lastError,
+    };
+  }
+
+  private _request(method: 'GET' | 'POST', requestPath: string, body: unknown, timeoutMs = 30000): Promise<BridgeResponse> {
+    return requestBridge(method, requestPath, body, timeoutMs, this._configStore);
+  }
+
+  async isAvailable(): Promise<BridgeAvailabilityResult> {
+    const cfg = this._configStore.readConfig();
     if (!cfg) {
-      return { available: false, error: ERROR.BRIDGE_NOT_FOUND, message: 'Config file not found' };
+      return {
+        available: false,
+        error: ERROR.BRIDGE_NOT_FOUND,
+        message: 'Config file not found',
+      };
     }
 
     const res = await this._request('GET', '/shizuku/status', null, 5000);
-    if (res.error === ERROR.BRIDGE_UNREACHABLE) {
-      return { available: false, error: ERROR.BRIDGE_UNREACHABLE, message: res.message };
+    const rawRes = res as Record<string, unknown>;
+    const status = typeof rawRes.status === 'string'
+      ? String(rawRes.status)
+      : null;
+    const serviceBound = typeof rawRes.serviceBound === 'boolean'
+      ? rawRes.serviceBound
+      : undefined;
+
+    if (!res.ok && status) {
+      if (status !== 'READY') {
+        return {
+          available: false,
+          error: ErrorCode.SHIZUKU_NOT_READY,
+          message: `Shizuku status: ${status}`,
+          status,
+          serviceBound: typeof serviceBound === 'boolean' ? serviceBound : undefined,
+        };
+      }
+      return {
+        available: true,
+        status,
+        serviceBound: typeof serviceBound === 'boolean' ? serviceBound : true,
+      };
     }
-    if (res.status && res.status !== 'READY') {
+
+    if (!res.ok) {
       return {
         available: false,
-        error: ERROR.SHIZUKU_NOT_READY,
-        message: 'Shizuku status: ' + res.status,
-        status: res.status,
-        serviceBound: res.serviceBound,
+        error: typeof res.error === 'string' ? res.error : ERROR.BRIDGE_UNREACHABLE,
+        message: res.message || 'Bridge status request failed',
+      };
+    }
+
+    if (status && status !== 'READY') {
+      return {
+        available: false,
+        error: ErrorCode.SHIZUKU_NOT_READY,
+        message: `Shizuku status: ${status}`,
+        status,
+        serviceBound,
       };
     }
 
     return {
       available: true,
-      status: res.status || 'READY',
-      serviceBound: res.serviceBound !== undefined ? res.serviceBound : true,
+      status: status || 'READY',
+      serviceBound: typeof serviceBound === 'boolean' ? serviceBound : true,
     };
   }
 
-  async exec(command, timeoutMs = 30000) {
+  exec(command: string, timeoutMs = 30000): Promise<BridgeResponse> {
     return this._request('POST', '/shizuku/exec', { command, timeoutMs }, timeoutMs + 5000);
   }
 
-  async execOrThrow(command, timeoutMs = 30000) {
+  async execOrThrow(command: string, timeoutMs = 30000): Promise<BridgeResponse> {
     const res = await this.exec(command, timeoutMs);
     if (!res.ok) {
-      const err = new Error(res.message || res.stderr || res.error || 'exec failed');
-      err.code = res.error || ERROR.EXEC_FAILED;
-      err.result = res;
-      throw err;
+      const message = res.message || res.stderr || res.error || 'exec failed';
+      const errorCode = typeof res.error === 'string' && res.error.length > 0
+        ? res.error
+        : ErrorCode.EXEC_FAILED;
+      const resultError: ErrorWithResult = new SkillError(errorCode, message) as ErrorWithResult;
+      resultError.result = res;
+      throw resultError;
     }
     return res;
   }
 }
 
-module.exports = { BridgeClient, ERROR, DEFAULT_CONFIG_PATH };
+module.exports = {
+  BridgeClient,
+  ERROR,
+  DEFAULT_CONFIG_PATH,
+};

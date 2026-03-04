@@ -28,7 +28,8 @@ public final class ShizukuBridgeServer {
     }
 
     private static final String LOG_TAG = "ShizukuBridgeServer";
-    private static final int MAX_REQUEST_BYTES = 64 * 1024;
+    private static final int MAX_REQUEST_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
     private static final int SOCKET_TIMEOUT_MS = 30000;
     private static final String DEFAULT_HOST = "127.0.0.1";
     public static final int DEFAULT_PORT = 18790;
@@ -374,8 +375,9 @@ public final class ShizukuBridgeServer {
             }
 
             byte[] payload = body.getBytes(StandardCharsets.UTF_8);
-            if (payload.length > MAX_REQUEST_BYTES) {
-                payload = "{\"ok\":false,\"error\":\"Response too large\"}".getBytes(StandardCharsets.UTF_8);
+            if (payload.length > MAX_RESPONSE_BYTES) {
+                Logger.logWarn(LOG_TAG, "Response too large: " + payload.length + " bytes, returning compact error");
+                payload = buildError("Response too large").getBytes(StandardCharsets.UTF_8);
             }
 
             OutputStream out = socket.getOutputStream();

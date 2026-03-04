@@ -2,9 +2,11 @@
   "name": "shizuku-automation",
   "version": "0.1.0",
   "description": "OpenClaw skill for Android app automation via Shizuku Bridge",
-  "main": "cli.js",
+  "main": "dist/cli.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "prebuild": "npm run clean",
+    "build": "tsc -p tsconfig.json --outDir dist"
   },
   "keywords": [
     "openclaw",
