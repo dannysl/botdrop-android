@@ -11,6 +11,7 @@ import { ErrorCode } from '../types';
 import type { UiElement, UiSelector } from '../types';
 
 const DUMP_TIMEOUT_MS = 15000;
+const DUMP_RETRY_ATTEMPTS = 2;
 const DEFAULT_WAIT_TIMEOUT_MS = 10000;
 const POLL_INTERVAL_MS = 500;
 const TMP_DUMP_PATH = getBotdropUiDumpPath('shizuku-ui-dump.xml');
@@ -113,6 +114,13 @@ function parseAttrs(attrs: string): UiElement {
   };
 }
 
+function elementArea(bounds: UiElement['bounds']): number {
+  if (!bounds) {
+    return 0;
+  }
+  return Math.max(0, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
+}
+
 function matchesSelector(el: UiElement, selector: UiSelector): boolean {
   const expectText = selector.text;
   const expectTextContains = selector.textContains;
@@ -135,6 +143,44 @@ function matchesSelector(el: UiElement, selector: UiSelector): boolean {
   if (expectPackageName !== undefined && el.packageName !== expectPackageName) return false;
 
   return true;
+}
+
+function isExplicitContentSelector(selector: UiSelector): boolean {
+  return (
+    selector.text !== undefined ||
+    selector.textContains !== undefined ||
+    selector.description !== undefined ||
+    selector.descriptionContains !== undefined
+  );
+}
+
+function pickBestEditTextCandidate(elements: ParsedUiElement[]): ParsedUiElement {
+  const candidates = [...elements].sort((a, b) => {
+    const aBounds = a.bounds;
+    const bBounds = b.bounds;
+
+    const aArea = elementArea(aBounds);
+    const bArea = elementArea(bBounds);
+    if (aArea !== bArea) {
+      return bArea - aArea;
+    }
+
+    const aTop = aBounds ? aBounds.top : 0;
+    const bTop = bBounds ? bBounds.top : 0;
+    if (aTop !== bTop) {
+      return bTop - aTop;
+    }
+
+    const aLeft = aBounds ? aBounds.left : 0;
+    const bLeft = bBounds ? bBounds.left : 0;
+    if (aLeft !== bLeft) {
+      return aLeft - bLeft;
+    }
+
+    return 0;
+  });
+
+  return candidates[0];
 }
 
 function parseXml(xml: string): UiElement[] {
@@ -168,21 +214,44 @@ function parseXmlWithTree(xml: string): ParsedUiElement[] {
 }
 
 function findTouchableAncestor(elements: ParsedUiElement[], leaf: ParsedUiElement): ParsedUiElement | null {
-  let current = leaf.parentIndex;
+  let current: number | null = leaf.parentIndex;
   let fallback: ParsedUiElement | null = null;
+  const leafCenter = leaf.center;
+  const leafBounds = leaf.bounds;
+
+  const hasBounds = (node: ParsedUiElement): boolean => Boolean(node.bounds && node.center);
+
+  if (!leafBounds || !leafCenter) {
+    // no direct bounds, try parent-first strategy below.
+  } else if (leaf.clickable || leaf.focusable) {
+    return leaf;
+  } else {
+    fallback = leaf;
+  }
+
   const visited = new Set<number>();
+  const leafIndex = elements.indexOf(leaf);
+  if (leafIndex >= 0) {
+    visited.add(leafIndex);
+  }
 
   while (current !== null && current >= 0 && current < elements.length && !visited.has(current)) {
     visited.add(current);
     const node = elements[current];
-    if (!node || !node.bounds || !node.center) {
-      current = node ? node.parentIndex : null;
+    if (!node) {
+      current = null;
       continue;
     }
+
+    if (!hasBounds(node)) {
+      current = node.parentIndex;
+      continue;
+    }
+
     if (node.clickable || node.focusable) {
       return node;
     }
-    if (!fallback) {
+    if (!fallback && hasBounds(node)) {
       fallback = node;
     }
     current = node.parentIndex;
@@ -213,16 +282,31 @@ class UIEngine {
   private async dumpWithTree(): Promise<ParsedUiElement[]> {
     await this._bridge.exec(`mkdir -p ${quoteShellArg(TMP_DUMP_DIR)}`);
 
-    const dumpRes = await this._bridge.exec(`uiautomator dump ${quoteShellArg(TMP_DUMP_PATH)}`, DUMP_TIMEOUT_MS);
-    if (!dumpRes.ok) {
-      throw wrapBridgeCommandError(`UI dump command failed: ${String(dumpRes.error || dumpRes.message || 'unknown error')}`, {
+    let dumpRes = null as null | { ok: boolean; stdout?: string; stderr?: string; message?: string; exitCode?: number; type?: string; error?: string; };
+    for (let attempt = 1; attempt <= DUMP_RETRY_ATTEMPTS; attempt += 1) {
+      dumpRes = await this._bridge.exec(`uiautomator dump ${quoteShellArg(TMP_DUMP_PATH)}`, DUMP_TIMEOUT_MS);
+      if (dumpRes.ok) {
+        break;
+      }
+
+      const exitCode = Number.isFinite(dumpRes.exitCode) ? dumpRes.exitCode : null;
+      const stderr = String(dumpRes.stderr || '');
+      const isRecoverable = exitCode === 137 || /Killed/i.test(stderr) || /TIMEOUT/i.test(String(dumpRes.message || ''));
+      if (!isRecoverable || attempt >= DUMP_RETRY_ATTEMPTS) {
+        break;
+      }
+      await sleep(300);
+    }
+    if (!dumpRes || !dumpRes.ok) {
+      const dumpError = dumpRes || { ok: false, message: 'No dump output captured' };
+      throw wrapBridgeCommandError(`UI dump command failed: ${String(dumpError.error || dumpError.message || 'unknown error')}`, {
         command: `uiautomator dump ${TMP_DUMP_PATH}`,
-        ok: dumpRes.ok,
-        exitCode: Number.isFinite(dumpRes.exitCode) ? dumpRes.exitCode : null,
-        stdout: String(dumpRes.stdout || ''),
-        stderr: String(dumpRes.stderr || ''),
-        message: dumpRes.message,
-        type: dumpRes.type || 'text',
+        ok: dumpError.ok,
+        exitCode: Number.isFinite(dumpError.exitCode) ? dumpError.exitCode : null,
+        stdout: String(dumpError.stdout || ''),
+        stderr: String(dumpError.stderr || ''),
+        message: dumpError.message,
+        type: dumpError.type || 'text',
       });
     }
 
@@ -266,7 +350,24 @@ class UIEngine {
 
   async findOne(selector: UiSelector): Promise<UiElement | null> {
     const elements = await this.findWithTree(selector);
-    const best = elements.find((el) => Boolean(el.center)) || elements[0];
+    const matchesWithCenter = elements.filter((el) => Boolean(el.center));
+
+    const best = (() => {
+      if (!matchesWithCenter.length) {
+        return elements[0];
+      }
+
+      if (
+        selector.className === 'android.widget.EditText' &&
+        selector.resourceId === undefined &&
+        !isExplicitContentSelector(selector)
+      ) {
+        return pickBestEditTextCandidate(matchesWithCenter);
+      }
+
+      return matchesWithCenter[0];
+    })();
+
     return best ? this.toUiElement(best) : null;
   }
 
@@ -304,12 +405,29 @@ class UIEngine {
       });
     }
 
-    let element = matches.find((el) => Boolean(el.center)) || null;
+    const matchesWithCenter = matches.filter((el) => Boolean(el.center));
+    const directCenterMatch: ParsedUiElement | null = (() => {
+      if (!matchesWithCenter.length) {
+        return matches[0] ?? null;
+      }
+
+      if (
+        selector.className === 'android.widget.EditText' &&
+        selector.resourceId === undefined &&
+        !isExplicitContentSelector(selector)
+      ) {
+        return pickBestEditTextCandidate(matchesWithCenter);
+      }
+
+      return matchesWithCenter[0] ?? null;
+    })();
+    const tapAnchor = directCenterMatch ?? matches[0] ?? null;
+    const elementWithFallback = tapAnchor ? findTouchableAncestor(allElements, tapAnchor) : null;
+    let element: ParsedUiElement | null = elementWithFallback || directCenterMatch || null;
+
     if (!element) {
       const noBounds = matches.find((el) => !el.center);
-      if (noBounds) {
-        element = findTouchableAncestor(allElements, noBounds);
-      }
+      element = noBounds ? findTouchableAncestor(allElements, noBounds) : null;
     }
 
     if (!element) {
@@ -336,6 +454,7 @@ class UIEngine {
 
     return { element: this.toUiElement(element), tapped: element.center };
   }
+
 }
 
 module.exports = {

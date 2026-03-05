@@ -6,6 +6,7 @@ const SHIZUKU_EXEC_COMMANDS = Object.freeze([
   'cmd',
   'dumpsys',
   'getprop',
+  'back',
   'input',
   'input-keyevent',
   'monkey',
@@ -19,6 +20,10 @@ const SHIZUKU_EXEC_COMMANDS = Object.freeze([
   'ui automator',
   'wm',
 ]);
+
+const SHIZUKU_EXEC_ALIASES: Record<string, string> = Object.freeze({
+  back: 'input keyevent KEYCODE_BACK',
+});
 
 type ExecRouting = (
   | { mode: 'shizuku'; command: string }
@@ -56,6 +61,10 @@ class ExecCommandRouter {
     }
 
     const first = tokens[0];
+    if (SHIZUKU_EXEC_ALIASES[first]) {
+      return { mode: 'shizuku', command: SHIZUKU_EXEC_ALIASES[first] };
+    }
+
     const firstTwo = `${first} ${tokens[1] || ''}`.trim();
     const routeKey = this._commandPrefixSet.has(firstTwo) ? firstTwo : first;
 

@@ -127,7 +127,17 @@ interface ActionLike {
   tapElement: (selector: UiSelector) => Promise<{ element: unknown; tapped: { x: number; y: number } }>;
   swipe: (x1: number, y1: number, x2: number, y2: number, durationMs?: number) => Promise<{ ok: true }>;
   press: (key: string) => Promise<{ ok: true; key: string; keycode: number }>;
-  type: (text: string) => Promise<{ ok: true; method: 'input-text' | 'clipboard'; text: string }>;
+  type: (
+    text: string,
+    timeoutMs?: number,
+    method?: 'auto' | 'input-text' | 'clipboard' | 'adb-keyboard',
+    options?: {
+      focus?: boolean;
+      focusSelector?: UiSelector | null;
+      focusTimeoutMs?: number;
+      inputMode?: 'append' | 'new';
+    }
+  ) => Promise<{ ok: true; method: 'input-text' | 'clipboard' | 'adb-keyboard'; text: string }>;
   uiDump: (selector?: UiSelector | null) => Promise<unknown[]>;
   waitFor: (selector: UiSelector, timeoutMs?: number) => Promise<unknown>;
   deviceInfo: () => Promise<{ ok: true; model: string; androidVersion: string; sdkVersion: string; manufacturer: string }>;
@@ -147,7 +157,16 @@ interface PackageMonitorLike {
     actions: Pick<ActionLike, 'currentApp'>,
     packageName: string,
     options: PostLaunchOptions
-  ): Promise<{ ok: boolean; stable: boolean; packageName: string | null; activity: string | null; raw: string; waitedMs: number; timeoutMs?: number; }>;
+  ): Promise<{
+    ok: boolean;
+    stable: boolean;
+    packageName: string | null;
+    activity: string | null;
+    raw: string;
+    waitedMs: number;
+    timeoutMs?: number;
+    reason?: string;
+  }>;
 }
 
 interface CliCallLoggerLike {

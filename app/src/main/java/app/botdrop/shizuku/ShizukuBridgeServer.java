@@ -5,9 +5,9 @@ import com.termux.shared.logger.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -123,11 +123,9 @@ public final class ShizukuBridgeServer {
 
     private void handleClient(Socket socket) {
         try {
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)
-            );
+            InputStream input = socket.getInputStream();
 
-            String requestLine = reader.readLine();
+            String requestLine = readLine(input);
             if (requestLine == null) {
                 writeResponse(socket, 400, "", buildError("Bad request"));
                 return;
@@ -146,7 +144,7 @@ public final class ShizukuBridgeServer {
             int contentLength = 0;
 
             String line;
-            while ((line = reader.readLine()) != null) {
+            while ((line = readLine(input)) != null) {
                 if (line.isEmpty()) {
                     break;
                 }
@@ -192,7 +190,7 @@ public final class ShizukuBridgeServer {
                 return;
             }
 
-            String body = readBody(reader, contentLength);
+            String body = readBody(input, contentLength);
             response = handleExec(body);
             writeResponse(socket, 200, "application/json", response);
         } catch (Throwable e) {
@@ -345,15 +343,15 @@ public final class ShizukuBridgeServer {
         return mAuthToken.equals(trimmedAuth);
     }
 
-    private String readBody(BufferedReader reader, int contentLength) throws IOException {
+    private String readBody(InputStream input, int contentLength) throws IOException {
         if (contentLength <= 0) {
             return "";
         }
 
-        char[] body = new char[contentLength];
+        byte[] body = new byte[contentLength];
         int readTotal = 0;
         while (readTotal < contentLength) {
-            int read = reader.read(body, readTotal, contentLength - readTotal);
+            int read = input.read(body, readTotal, contentLength - readTotal);
             if (read <= 0) {
                 break;
             }
@@ -362,7 +360,29 @@ public final class ShizukuBridgeServer {
         if (readTotal <= 0) {
             return "";
         }
-        return new String(body, 0, readTotal);
+        return new String(body, 0, readTotal, StandardCharsets.UTF_8);
+    }
+
+    private String readLine(InputStream input) throws IOException {
+        ByteArrayOutputStream lineBuffer = new ByteArrayOutputStream(128);
+        int b;
+        while ((b = input.read()) != -1) {
+            if (b == '\n') {
+                break;
+            }
+            lineBuffer.write(b);
+        }
+
+        if (b == -1 && lineBuffer.size() == 0) {
+            return null;
+        }
+
+        byte[] raw = lineBuffer.toByteArray();
+        int len = raw.length;
+        if (len > 0 && raw[len - 1] == '\r') {
+            len -= 1;
+        }
+        return new String(raw, 0, len, StandardCharsets.UTF_8);
     }
 
     private void writeResponse(Socket socket, int code, String contentType, String body) {

@@ -10,7 +10,6 @@ const { CliCallLogger } = require('./lib/cli-call-logger');
 const { CliArgumentParser } = require('./lib/cli-argument-parser');
 const { ForegroundPackageMonitor } = require('./lib/foreground-package-monitor');
 const { ExecCommandRouter } = require('./lib/exec-command-router');
-const { LatestTweetAnalyzer } = require('./lib/latest-tweet-analyzer');
 const { CliRuntimeServices } = require('./lib/cli-runtime-services');
 const { CliRuntime } = require('./lib/cli-runtime');
 const { CliCommandHandler } = require('./lib/cli-command-handler');
@@ -21,7 +20,6 @@ const cliCallLogger = new CliCallLogger(cliRuntimeServices.logFilePath);
 const cliArgumentParser = new CliArgumentParser();
 const foregroundPackageMonitor = new ForegroundPackageMonitor();
 const execCommandRouter = new ExecCommandRouter();
-const latestTweetAnalyzer = new LatestTweetAnalyzer();
 
 const cliRuntime = new CliRuntime(
   cliCallLogger,
@@ -32,7 +30,7 @@ const cliRuntime = new CliRuntime(
   foregroundPackageMonitor,
   execCommandRouter
 );
-const cliCommandHandler = new CliCommandHandler(cliRuntime, latestTweetAnalyzer);
+const cliCommandHandler = new CliCommandHandler(cliRuntime);
 
 const LOCAL_EXEC_HOME = cliRuntimeServices.localExecHome;
 
