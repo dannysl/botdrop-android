@@ -16,7 +16,7 @@ import com.termux.shared.logger.Logger;
  * Usage via Shizuku / adb shell:
  *   am broadcast -a app.botdrop.SET_CLIPBOARD --es text "你好世界"
  *
- * This is used by the shizuku-automation OpenClaw skill to enable
+ * This is used by the botdrop-u2 OpenClaw skill to enable
  * Chinese and special character text input by setting the clipboard
  * and then simulating a paste keyevent (KEYCODE_PASTE = 279).
  */

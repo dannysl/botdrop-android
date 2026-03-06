@@ -11,8 +11,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.os.Environment;
 import android.os.Build;
 import android.net.Uri;
@@ -36,11 +34,9 @@ import app.botdrop.shizuku.ShizukuBridgeService;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.shared.android.PermissionUtils;
-import com.termux.shizuku.ShizukuStatusActivity;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import moe.shizuku.manager.MainActivity;
-import rikka.shizuku.Shizuku;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -85,7 +81,6 @@ public class DashboardActivity extends Activity {
 
     private static final String LOG_TAG = "DashboardActivity";
     public static final String NOTIFICATION_CHANNEL_ID = "botdrop_gateway";
-    private static final int SHIZUKU_PERMISSION_REQUEST_CODE = 2001;
     private static final int STATUS_REFRESH_INTERVAL_MS = 5000; // 5 seconds
     private static final int ERROR_CHECK_INTERVAL_MS = 15000; // 15 seconds
     private static final String MODEL_LIST_COMMAND = "openclaw models list --all --plain";
@@ -166,8 +161,7 @@ public class DashboardActivity extends Activity {
     private TextView mOpenclawWebUiButton;
     private TextView mOpenclawBackupButton;
     private TextView mOpenclawRestoreButton;
-    private Button mOpenShizukuButton;
-    private Button mShizukuPermissionButton;
+    private Button mOpenAutomationPanelButton;
     private ImageButton mBackToAgentSelectionButton;
     private String mOpenclawLatestUpdateVersion;
     private AlertDialog mOpenclawUpdateDialog;
@@ -185,46 +179,6 @@ public class DashboardActivity extends Activity {
     private String mLastErrorMessage;
     private Runnable mPendingOpenclawStorageAction;
     private Runnable mPendingOpenclawStorageDeniedAction;
-    private final rikka.shizuku.Shizuku.OnRequestPermissionResultListener mShizukuPermissionResultListener =
-            new rikka.shizuku.Shizuku.OnRequestPermissionResultListener() {
-                @Override
-                public void onRequestPermissionResult(int requestCode, int grantResult) {
-                    if (requestCode != SHIZUKU_PERMISSION_REQUEST_CODE) {
-                        return;
-                    }
-                    boolean granted = grantResult == PackageManager.PERMISSION_GRANTED;
-                    Logger.logInfo(
-                            LOG_TAG,
-                            "Shizuku permission result callback: requestCode="
-                                    + requestCode
-                                    + ", grantResult="
-                                    + grantResult
-                                    + ", granted="
-                                    + granted
-                    );
-                    runOnUiThread(() -> {
-                        runShizukuPermissionButtonStateBusy(false, null);
-                        Toast.makeText(
-                                DashboardActivity.this,
-                                granted ? "Shizuku permission granted" : "Shizuku permission denied",
-                                Toast.LENGTH_SHORT
-                        ).show();
-                        if (granted) {
-                            runShizukuGatewayPrecheck();
-                        } else {
-                            Logger.logWarn(
-                                    LOG_TAG,
-                                    "Shizuku permission request denied: requestCode="
-                                            + requestCode
-                                            + ", package="
-                                            + getPackageName()
-                            );
-                        }
-                    });
-                    Shizuku.removeRequestPermissionResultListener(this);
-                }
-            };
-
     private interface ModelListPrefetchCallback {
         void onFinished(boolean success);
     }
@@ -288,11 +242,11 @@ public class DashboardActivity extends Activity {
         mStopButton = findViewById(R.id.btn_stop);
         mRestartButton = findViewById(R.id.btn_restart);
         Button openTerminalButton = findViewById(R.id.btn_open_terminal);
-        mOpenShizukuButton = findViewById(R.id.btn_open_shizuku);
         mCurrentModelText = findViewById(R.id.current_model_text);
         Button changeModelButton = findViewById(R.id.btn_change_model);
         mGatewayErrorBanner = findViewById(R.id.gateway_error_banner);
         mGatewayErrorText = findViewById(R.id.gateway_error_text);
+        mOpenAutomationPanelButton = findViewById(R.id.btn_open_automation_panel);
 
         // Setup button listeners
         mStartButton.setOnClickListener(v -> startGateway());
@@ -300,12 +254,8 @@ public class DashboardActivity extends Activity {
         mRestartButton.setOnClickListener(v -> restartGatewayForControl());
         openTerminalButton.setOnClickListener(v -> openTerminal());
         changeModelButton.setOnClickListener(v -> showModelSelector());
-        if (mOpenShizukuButton != null) {
-            mOpenShizukuButton.setOnClickListener(v -> openShizukuStatus());
-        }
-        mShizukuPermissionButton = findViewById(R.id.btn_request_shizuku_permission);
-        if (mShizukuPermissionButton != null) {
-            mShizukuPermissionButton.setOnClickListener(v -> diagnoseShizukuPermission());
+        if (mOpenAutomationPanelButton != null) {
+            mOpenAutomationPanelButton.setOnClickListener(v -> openAutomationPanel());
         }
 
         mSshCard = findViewById(R.id.ssh_card);
@@ -415,7 +365,6 @@ public class DashboardActivity extends Activity {
             unbindService(mConnection);
             mBound = false;
         }
-        Shizuku.removeRequestPermissionResultListener(mShizukuPermissionResultListener);
     }
 
     @Override
@@ -1534,160 +1483,9 @@ public class DashboardActivity extends Activity {
         Intent intent = new Intent(this, TermuxActivity.class);
         startActivity(intent);
     }
-
-    private void openShizukuStatus() {
-        if (startOfficialShizukuHome()) {
-            return;
-        }
-
-        Intent intent = new Intent(this, ShizukuStatusActivity.class);
-        intent.putExtra(ShizukuStatusActivity.EXTRA_AUTO_START, true);
-        intent.putExtra(ShizukuStatusActivity.EXTRA_AUTO_REQUEST_PERMISSION, true);
+    private void openAutomationPanel() {
+        Intent intent = new Intent(this, AutomationPanelActivity.class);
         startActivity(intent);
-    }
-
-    private void diagnoseShizukuPermission() {
-        Logger.logInfo(LOG_TAG, "diagnoseShizukuPermission: binder ready=" + Shizuku.pingBinder());
-        if (!Shizuku.pingBinder()) {
-            Toast.makeText(this, "Shizuku binder not ready", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        int permission = PackageManager.PERMISSION_DENIED;
-        try {
-            permission = Shizuku.checkSelfPermission();
-        } catch (Throwable tr) {
-            Logger.logWarn(LOG_TAG, "checkSelfPermission failed: " + tr.getMessage());
-        }
-
-        Logger.logInfo(
-                LOG_TAG,
-                "Shizuku checkSelfPermission="
-                        + (permission == PackageManager.PERMISSION_GRANTED ? "GRANTED" : "DENIED")
-                        + ", uid=" + android.os.Process.myUid()
-                        + ", serverUid=" + Shizuku.getUid()
-        );
-
-        if (permission == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Shizuku already granted", Toast.LENGTH_SHORT).show();
-            runShizukuGatewayPrecheck();
-            return;
-        }
-
-        runShizukuPermissionButtonStateBusy(true, "Waiting...");
-        Shizuku.removeRequestPermissionResultListener(mShizukuPermissionResultListener);
-        Shizuku.addRequestPermissionResultListener(mShizukuPermissionResultListener);
-        Toast.makeText(this, "Requesting Shizuku permission...", Toast.LENGTH_SHORT).show();
-        Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE);
-    }
-
-    private void runShizukuGatewayPrecheck() {
-        if (mBotDropService == null) {
-            Logger.logWarn(LOG_TAG, "Shizuku precheck skipped: BotDropService not connected");
-            Toast.makeText(this, "Service not connected, cannot run Shizuku precheck", Toast.LENGTH_SHORT).show();
-            runShizukuPermissionButtonStateBusy(false, null);
-            return;
-        }
-
-        Logger.logInfo(LOG_TAG, "Running Shizuku precheck command: " + OPENCLAW_GATEWAY_PRECHECK_COMMAND);
-        runShizukuPermissionButtonStateBusy(true, "Checking...");
-
-        mBotDropService.executeCommand(OPENCLAW_GATEWAY_PRECHECK_COMMAND, result -> {
-            runOnUiThread(() -> {
-                runShizukuPermissionButtonStateBusy(false, null);
-                if (result == null) {
-                    Logger.logWarn(LOG_TAG, "Shizuku precheck returned null result");
-                    Toast.makeText(DashboardActivity.this, "Shizuku precheck: no result", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                Logger.logInfo(
-                        LOG_TAG,
-                        "Shizuku precheck exit=" + result.exitCode + ", success=" + result.success
-                                + ", stdoutLen=" + (result.stdout == null ? 0 : result.stdout.length())
-                                + ", stderrLen=" + (result.stderr == null ? 0 : result.stderr.length())
-                );
-
-                if (result.success) {
-                    Toast.makeText(DashboardActivity.this, "Shizuku precheck passed", Toast.LENGTH_SHORT).show();
-                } else {
-                    String reason = TextUtils.isEmpty(result.stderr) ? result.stdout : result.stderr;
-                    Toast.makeText(
-                            DashboardActivity.this,
-                            "Shizuku precheck failed: " + (TextUtils.isEmpty(reason) ? "unknown" : reason),
-                            Toast.LENGTH_LONG
-                    ).show();
-                }
-            });
-        });
-    }
-
-    private void runShizukuPermissionButtonStateBusy(boolean busy, @Nullable String busyText) {
-        if (mShizukuPermissionButton == null) {
-            return;
-        }
-        mShizukuPermissionButton.setEnabled(!busy);
-        mShizukuPermissionButton.setAlpha(busy ? 0.6f : 1f);
-        if (busyText != null) {
-            mShizukuPermissionButton.setText(busyText);
-        } else {
-            mShizukuPermissionButton.setText("Check Shizuku Permission");
-        }
-    }
-
-    private boolean startOfficialShizukuHome() {
-        if (startShizukuActivity(new Intent(this, MainActivity.class))) {
-            return true;
-        }
-
-        Intent launcherIntent = resolveShizukuManagerLauncherActivity();
-        if (launcherIntent != null && startShizukuActivity(launcherIntent)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private Intent resolveShizukuManagerLauncherActivity() {
-        Intent launcherIntent = new Intent(Intent.ACTION_MAIN);
-        launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        launcherIntent.setPackage(getPackageName());
-
-        List<ResolveInfo> activities = getPackageManager().queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL);
-        if (activities == null) {
-            return null;
-        }
-
-        for (ResolveInfo activity : activities) {
-            if (activity.activityInfo == null) {
-                continue;
-            }
-
-            String className = activity.activityInfo.name;
-            if (className != null && className.startsWith("moe.shizuku.manager")) {
-                return new Intent(launcherIntent).setClassName(activity.activityInfo.packageName, className);
-            }
-        }
-        return null;
-    }
-
-    private boolean startShizukuActivity(Intent intent) {
-        try {
-            startActivity(intent);
-            return true;
-        } catch (ActivityNotFoundException e) {
-            Logger.logWarn(LOG_TAG, "Internal Shizuku home not found: " + intent);
-        } catch (Exception e) {
-            Logger.logWarn(LOG_TAG, "Failed to open internal Shizuku home: " + intent + ", " + e.getMessage());
-        }
-        return false;
-    }
-
-    private boolean startInternalShizukuHomeActivity(ComponentName componentName) {
-        Intent intent = new Intent(Intent.ACTION_MAIN);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        intent.setComponent(componentName);
-        return startShizukuActivity(intent);
     }
 
     private void startShizukuBridgeService() {

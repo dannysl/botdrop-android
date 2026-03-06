@@ -67,6 +67,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
         android:theme="@style/Theme.TermuxApp.DayNight.DarkActionBar"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="m">
 
         <activity
@@ -122,6 +123,11 @@
 
         <activity
             android:name="app.botdrop.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="app.botdrop.AutomationPanelActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
@@ -267,7 +273,7 @@
         </receiver>
 
 
-        <!-- Clipboard receiver for shizuku-automation OpenClaw skill.
+        <!-- Clipboard receiver for botdrop-u2 OpenClaw skill.
              Allows setting clipboard via: am broadcast -a app.botdrop.SET_CLIPBOARD minus-option text "..." -->
         <receiver
             android:name=".botdrop.ClipboardReceiver"

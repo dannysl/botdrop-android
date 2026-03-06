@@ -47,4 +47,4 @@ keystore/
 .worktrees/
 
 # Skill TypeScript build output
-app/src/main/assets/skills/shizuku-automation/dist/
+app/src/main/assets/skills/botdrop-u2/dist/

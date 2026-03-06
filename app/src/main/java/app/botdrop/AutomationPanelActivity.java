@@ -1,0 +1,1010 @@
+package app.botdrop;
+
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.text.TextUtils;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.Nullable;
+
+import com.termux.R;
+import com.termux.shizuku.ShizukuStatusActivity;
+import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.TermuxConstants;
+
+import app.botdrop.shizuku.ShizukuShellExecutor;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.List;
+
+import moe.shizuku.manager.MainActivity;
+import rikka.shizuku.Shizuku;
+
+/**
+ * Dedicated panel for automation related controls (currently Shizuku helpers).
+ */
+public class AutomationPanelActivity extends Activity {
+
+    private static final String LOG_TAG = "AutomationPanelActivity";
+    private static final int SHIZUKU_PERMISSION_REQUEST_CODE = 2001;
+    private static final String OPENCLAW_GATEWAY_PRECHECK_COMMAND = "openclaw --version";
+    private static final long SERVICE_STATUS_TIMEOUT_MS = 1500;
+    private static final long SHIZUKU_SHELL_COMMAND_TIMEOUT_MS = 30000;
+    private static final long SHIZUKU_SHELL_CONNECT_TIMEOUT_MS = 5000;
+    private static final long SERVICE_REFRESH_DELAY_MS = 1000;
+    private static final long STATUS_POLL_INTERVAL_MS = 3000;
+    private static final String SHIZUKU_BRIDGE_STATUS_URL = "http://127.0.0.1:18790/shizuku/status";
+    private static final String U2_PING_URL = "http://127.0.0.1:9008/ping";
+    private static final String SHIZUKU_BRIDGE_CONFIG_PATH =
+        TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/shizuku-bridge.json";
+    // Shizuku shell runs as `shell` user and cannot reliably write app-internal dirs.
+    private static final String U2_PID_FILE = "/data/local/tmp/u2.pid";
+    private static final String U2_RUNTIME_JAR_PATH = "/data/local/tmp/u2.jar";
+    private static final String U2_ASSET_PATH = "u2.jar";
+    private static final long U2_PREPARE_TIMEOUT_MS = 180000;
+
+    private ImageButton mBackButton;
+    private Button mOpenShizukuButton;
+    private Button mShizukuPermissionButton;
+    private TextView mStatusText;
+    private TextView mShizukuBridgeStatusText;
+    private TextView mU2StatusText;
+    private Button mStartU2ServiceButton;
+    private Button mStopU2ServiceButton;
+
+    private BotDropService mBotDropService;
+    private ShizukuShellExecutor mShizukuShellExecutor;
+    private boolean mBound;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mStatusPollRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isUiAvailable()) {
+                return;
+            }
+            refreshAutomationServiceStatuses();
+            mHandler.postDelayed(this, STATUS_POLL_INTERVAL_MS);
+        }
+    };
+    private final rikka.shizuku.Shizuku.OnRequestPermissionResultListener mShizukuPermissionResultListener =
+            new rikka.shizuku.Shizuku.OnRequestPermissionResultListener() {
+                @Override
+                public void onRequestPermissionResult(int requestCode, int grantResult) {
+                    if (requestCode != SHIZUKU_PERMISSION_REQUEST_CODE) {
+                        return;
+                    }
+
+                    boolean granted = grantResult == PackageManager.PERMISSION_GRANTED;
+                    Logger.logInfo(
+                        LOG_TAG,
+                        "Shizuku permission result callback: requestCode="
+                                + requestCode
+                                + ", grantResult="
+                                + grantResult
+                                + ", granted="
+                                + granted
+                    );
+                    runOnUiThread(() -> {
+                        runShizukuPermissionButtonStateBusy(false, null);
+                        mStatusText.setText(
+                                granted
+                                        ? getString(R.string.botdrop_shizuku_permission_granted)
+                                        : getString(R.string.botdrop_shizuku_permission_denied)
+                        );
+                        Toast.makeText(
+                                AutomationPanelActivity.this,
+                                granted
+                                        ? getString(R.string.botdrop_shizuku_permission_granted)
+                                        : getString(R.string.botdrop_shizuku_permission_denied),
+                                Toast.LENGTH_SHORT
+                        ).show();
+                        if (granted) {
+                            runShizukuGatewayPrecheck();
+                        } else {
+                            Logger.logWarn(
+                                    LOG_TAG,
+                                    "Shizuku permission request denied: requestCode="
+                                            + requestCode
+                                            + ", package="
+                                            + getPackageName()
+                            );
+                        }
+                    });
+                    Shizuku.removeRequestPermissionResultListener(this);
+                }
+            };
+
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            BotDropService.LocalBinder binder = (BotDropService.LocalBinder) service;
+            mBotDropService = binder.getService();
+            mBound = true;
+            Logger.logDebug(LOG_TAG, "Service connected");
+            refreshShizukuPermissionState();
+            refreshAutomationServiceStatuses();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            mBotDropService = null;
+            mBound = false;
+            setU2ServiceButtonsState(false, false);
+            Logger.logDebug(LOG_TAG, "Service disconnected");
+        }
+    };
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_shizuku_automation);
+
+        mBackButton = findViewById(R.id.btn_back_to_dashboard);
+        mOpenShizukuButton = findViewById(R.id.btn_open_shizuku);
+        mShizukuPermissionButton = findViewById(R.id.btn_request_shizuku_permission);
+        mStatusText = findViewById(R.id.automation_status_text);
+        mShizukuBridgeStatusText = findViewById(R.id.automation_shizuku_bridge_status_text);
+        mU2StatusText = findViewById(R.id.automation_u2_status_text);
+        mStartU2ServiceButton = findViewById(R.id.btn_start_u2_service);
+        mStopU2ServiceButton = findViewById(R.id.btn_stop_u2_service);
+
+        mBackButton.setOnClickListener(v -> finish());
+        mOpenShizukuButton.setOnClickListener(v -> openShizukuStatus());
+        mShizukuPermissionButton.setOnClickListener(v -> diagnoseShizukuPermission());
+        mStartU2ServiceButton.setOnClickListener(v -> startU2Service());
+        mStopU2ServiceButton.setOnClickListener(v -> stopU2Service());
+
+        bindBotDropService();
+        initShizukuShellExecutor();
+        refreshShizukuPermissionState();
+        refreshAutomationServiceStatuses();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshShizukuPermissionState();
+        startStatusPolling();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopStatusPolling();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopStatusPolling();
+        Shizuku.removeRequestPermissionResultListener(mShizukuPermissionResultListener);
+        if (mBound) {
+            unbindService(mConnection);
+            mBound = false;
+        }
+        if (mShizukuShellExecutor != null) {
+            mShizukuShellExecutor.shutdown();
+            mShizukuShellExecutor = null;
+        }
+        mBotDropService = null;
+    }
+
+    private void initShizukuShellExecutor() {
+        mShizukuShellExecutor = new ShizukuShellExecutor(this);
+        mShizukuShellExecutor.bind();
+    }
+
+    private void bindBotDropService() {
+        Intent intent = new Intent(this, BotDropService.class);
+        try {
+            bindService(intent, mConnection, BIND_AUTO_CREATE);
+        } catch (Throwable e) {
+            Logger.logWarn(LOG_TAG, "Failed to bind BotDropService: " + e.getMessage());
+        }
+    }
+
+    private void startStatusPolling() {
+        mHandler.removeCallbacks(mStatusPollRunnable);
+        mHandler.post(mStatusPollRunnable);
+    }
+
+    private void stopStatusPolling() {
+        mHandler.removeCallbacks(mStatusPollRunnable);
+    }
+
+    private void openShizukuStatus() {
+        if (startOfficialShizukuHome()) {
+            return;
+        }
+
+        Intent intent = new Intent(this, ShizukuStatusActivity.class);
+        intent.putExtra(ShizukuStatusActivity.EXTRA_AUTO_START, true);
+        intent.putExtra(ShizukuStatusActivity.EXTRA_AUTO_REQUEST_PERMISSION, true);
+        startActivity(intent);
+    }
+
+    private void diagnoseShizukuPermission() {
+        Logger.logInfo(LOG_TAG, "diagnoseShizukuPermission: binder ready=" + Shizuku.pingBinder());
+        if (!Shizuku.pingBinder()) {
+            mStatusText.setText(getString(R.string.botdrop_shizuku_binder_not_ready));
+            Toast.makeText(this, getString(R.string.botdrop_shizuku_binder_not_ready), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        int permission = PackageManager.PERMISSION_DENIED;
+        try {
+            permission = Shizuku.checkSelfPermission();
+        } catch (Throwable tr) {
+            Logger.logWarn(LOG_TAG, "checkSelfPermission failed: " + tr.getMessage());
+        }
+
+        Logger.logInfo(
+                LOG_TAG,
+                "Shizuku checkSelfPermission="
+                        + (permission == PackageManager.PERMISSION_GRANTED ? "GRANTED" : "DENIED")
+                        + ", uid=" + android.os.Process.myUid()
+                        + ", serverUid=" + Shizuku.getUid()
+        );
+
+        if (permission == PackageManager.PERMISSION_GRANTED) {
+            mStatusText.setText(getString(R.string.botdrop_shizuku_permission_already_granted));
+            Toast.makeText(this, getString(R.string.botdrop_shizuku_permission_already_granted), Toast.LENGTH_SHORT).show();
+            runShizukuGatewayPrecheck();
+            return;
+        }
+
+        runShizukuPermissionButtonStateBusy(true, getString(R.string.botdrop_waiting));
+        mStatusText.setText(getString(R.string.botdrop_shizuku_requesting_permission));
+        Shizuku.removeRequestPermissionResultListener(mShizukuPermissionResultListener);
+        Shizuku.addRequestPermissionResultListener(mShizukuPermissionResultListener);
+        Toast.makeText(this, getString(R.string.botdrop_shizuku_requesting_permission), Toast.LENGTH_SHORT).show();
+        Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE);
+    }
+
+    private void runShizukuGatewayPrecheck() {
+        if (mBotDropService == null) {
+            Logger.logWarn(LOG_TAG, "Shizuku precheck skipped: BotDropService not connected");
+            Toast.makeText(this, getString(R.string.botdrop_shizuku_precheck_service_not_connected), Toast.LENGTH_SHORT).show();
+            runShizukuPermissionButtonStateBusy(false, null);
+            mStatusText.setText(getString(R.string.botdrop_shizuku_precheck_service_not_connected));
+            return;
+        }
+
+        Logger.logInfo(LOG_TAG, "Running Shizuku precheck command: " + OPENCLAW_GATEWAY_PRECHECK_COMMAND);
+        runShizukuPermissionButtonStateBusy(true, getString(R.string.botdrop_checking));
+        mStatusText.setText(getString(R.string.botdrop_shizuku_precheck_running));
+
+        mBotDropService.executeCommand(OPENCLAW_GATEWAY_PRECHECK_COMMAND, result -> {
+            runOnUiThread(() -> {
+                runShizukuPermissionButtonStateBusy(false, null);
+                if (result == null) {
+                    Logger.logWarn(LOG_TAG, "Shizuku precheck returned null result");
+                    mStatusText.setText(getString(R.string.botdrop_shizuku_precheck_no_result));
+                    Toast.makeText(AutomationPanelActivity.this, getString(R.string.botdrop_shizuku_precheck_no_result), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                Logger.logInfo(
+                        LOG_TAG,
+                        "Shizuku precheck exit=" + result.exitCode + ", success=" + result.success
+                                + ", stdoutLen=" + (result.stdout == null ? 0 : result.stdout.length())
+                                + ", stderrLen=" + (result.stderr == null ? 0 : result.stderr.length())
+                );
+
+                if (result.success) {
+                    mStatusText.setText(getString(R.string.botdrop_shizuku_precheck_passed));
+                    Toast.makeText(AutomationPanelActivity.this, getString(R.string.botdrop_shizuku_precheck_passed), Toast.LENGTH_SHORT).show();
+                } else {
+                    String reason = TextUtils.isEmpty(result.stderr) ? result.stdout : result.stderr;
+                    String shownReason = TextUtils.isEmpty(reason) ? getString(R.string.botdrop_unknown) : reason;
+                    mStatusText.setText(
+                            getString(R.string.botdrop_shizuku_precheck_failed, shownReason)
+                    );
+                    Toast.makeText(
+                            AutomationPanelActivity.this,
+                            getString(R.string.botdrop_shizuku_precheck_failed, shownReason),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+        });
+    }
+
+    private void refreshShizukuPermissionState() {
+        if (mStatusText == null) {
+            return;
+        }
+
+        try {
+            if (!Shizuku.pingBinder()) {
+                mStatusText.setText(getString(R.string.botdrop_shizuku_binder_not_ready));
+                return;
+            }
+            int permission = Shizuku.checkSelfPermission();
+            if (permission == PackageManager.PERMISSION_GRANTED) {
+                mStatusText.setText(getString(R.string.botdrop_shizuku_permission_granted));
+            } else {
+                mStatusText.setText(getString(R.string.botdrop_shizuku_permission_not_granted));
+            }
+        } catch (Throwable tr) {
+            mStatusText.setText(getString(R.string.botdrop_shizuku_status_unavailable));
+            Logger.logWarn(LOG_TAG, "refreshShizukuPermissionState failed: " + tr.getMessage());
+        }
+    }
+
+    private void refreshAutomationServiceStatuses() {
+        checkShizukuBridgeStatus();
+        checkU2ServiceStatus();
+        if (!mBound) {
+            setU2ServiceButtonsState(false, false);
+        }
+    }
+
+    private void checkShizukuBridgeStatus() {
+        if (mShizukuBridgeStatusText == null) {
+            return;
+        }
+
+        if (TextUtils.isEmpty(mShizukuBridgeStatusText.getText())) {
+            mShizukuBridgeStatusText.setText(getString(R.string.botdrop_shizuku_bridge_status_checking));
+        }
+
+        new Thread(() -> {
+            String token = readShizukuBridgeToken();
+            final ServiceStateResult result;
+
+            if (TextUtils.isEmpty(token)) {
+                result = new ServiceStateResult(false, getString(R.string.botdrop_shizuku_bridge_status_not_configured));
+            } else {
+                result = queryHttpEndpoint(SHIZUKU_BRIDGE_STATUS_URL, "Bearer " + token);
+            }
+
+            if (!isUiAvailable()) {
+                return;
+            }
+
+            runOnUiThread(() -> {
+                if (!isUiAvailable() || mShizukuBridgeStatusText == null) {
+                    return;
+                }
+
+                if (result.running) {
+                    mShizukuBridgeStatusText.setText(getString(R.string.botdrop_shizuku_bridge_status_running));
+                } else if (TextUtils.isEmpty(result.message)) {
+                    mShizukuBridgeStatusText.setText(getString(R.string.botdrop_shizuku_bridge_status_stopped));
+                } else {
+                    mShizukuBridgeStatusText.setText(
+                        getString(R.string.botdrop_shizuku_bridge_status_stopped_with_reason, result.message)
+                    );
+                }
+            });
+        }).start();
+    }
+
+    private void checkU2ServiceStatus() {
+        if (mU2StatusText == null) {
+            return;
+        }
+
+        if (TextUtils.isEmpty(mU2StatusText.getText())) {
+            mU2StatusText.setText(getString(R.string.botdrop_u2_service_status_checking));
+        }
+        executeShizukuShellCommand(buildCheckU2StatusCommand(), result -> {
+            if (!isUiAvailable() || mU2StatusText == null) {
+                return;
+            }
+
+            ServiceStateResult stateResult;
+            if (result != null && result.success) {
+                String output = result.stdout == null ? "" : result.stdout.trim();
+                if ("running".equalsIgnoreCase(output)) {
+                    stateResult = new ServiceStateResult(true, null);
+                } else if ("stopped".equalsIgnoreCase(output)) {
+                    stateResult = new ServiceStateResult(false, null);
+                } else {
+                    stateResult = queryHttpEndpoint(U2_PING_URL, null);
+                }
+            } else {
+                ServiceStateResult httpFallback = queryHttpEndpoint(U2_PING_URL, null);
+                if (httpFallback.running) {
+                    stateResult = httpFallback;
+                } else {
+                    String reason = null;
+                    if (result != null) {
+                        reason = !TextUtils.isEmpty(result.stderr) ? result.stderr
+                            : (!TextUtils.isEmpty(result.stdout) ? result.stdout : ("exit " + result.exitCode));
+                    }
+                    stateResult = new ServiceStateResult(false, reason);
+                }
+            }
+
+            if (stateResult.running) {
+                mU2StatusText.setText(getString(R.string.botdrop_u2_service_status_running));
+                setU2ServiceButtonsState(false, true);
+            } else if (TextUtils.isEmpty(stateResult.message)) {
+                mU2StatusText.setText(getString(R.string.botdrop_u2_service_status_stopped));
+                setU2ServiceButtonsState(true, false);
+            } else {
+                mU2StatusText.setText(
+                    getString(R.string.botdrop_u2_service_status_stopped_with_reason, stateResult.message)
+                );
+                setU2ServiceButtonsState(true, false);
+            }
+        });
+    }
+
+    private void startU2Service() {
+        if (mBotDropService == null || !mBound) {
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        setU2ServiceButtonsState(false, false);
+        mU2StatusText.setText(getString(R.string.botdrop_u2_service_status_checking));
+        Toast.makeText(this, getString(R.string.botdrop_u2_service_starting), Toast.LENGTH_SHORT).show();
+
+        new Thread(() -> {
+            // Pre-step: copy u2.jar from assets to /data/local/tmp/
+            String copyMessage = ensureU2JarFromAssets();
+            if (!TextUtils.isEmpty(copyMessage)) {
+                runOnUiThread(() -> {
+                    Toast.makeText(this, getString(R.string.botdrop_u2_service_start_failed) + ": " + copyMessage,
+                            Toast.LENGTH_LONG).show();
+                    Logger.logWarn(LOG_TAG, "Prepare u2 jar failed: " + copyMessage);
+                    checkU2ServiceStatus();
+                });
+                return;
+            }
+
+            // Check if u2automator is already installed
+            setU2StatusText(getString(R.string.botdrop_u2_service_status_checking));
+            mBotDropService.executeU2SetupCommand(buildCheckU2AutomatorInstalledCommand(), checkResult -> {
+                if (!isUiAvailable()) return;
+                if (checkResult != null && checkResult.success) {
+                    // Already installed – skip to step 4
+                    Logger.logInfo(LOG_TAG, "u2automator already installed, skipping steps 1-3");
+                    startU2Jar();
+                } else {
+                    // Not installed – run full setup steps 1-3 then start
+                    runU2SetupSteps();
+                }
+            });
+        }).start();
+    }
+
+    private void startU2Jar() {
+        setU2StatusText(getString(R.string.botdrop_u2_service_prepare_step_complete));
+        executeShizukuShellCommand(buildStartU2Command(), step4 -> {
+            if (!isUiAvailable()) return;
+            if (step4 == null || !step4.success) {
+                handleU2StartStepFailure("start u2.jar", step4);
+                return;
+            }
+            runOnUiThread(() -> {
+                Toast.makeText(this,
+                        getString(R.string.botdrop_u2_service_start_command_sent),
+                        Toast.LENGTH_SHORT).show();
+                mHandler.postDelayed(this::checkU2ServiceStatus, SERVICE_REFRESH_DELAY_MS);
+            });
+        });
+    }
+
+    private void runU2SetupSteps() {
+        // Step 1/4: Trim apt sources (via Termux shell)
+        setU2StatusText(getString(R.string.botdrop_u2_service_prepare_step_clean_sources));
+        mBotDropService.executeU2SetupCommand(buildTrimAptSourcesForU2Command(), step1 -> {
+            if (!isUiAvailable()) return;
+            if (step1 == null || !step1.success) {
+                handleU2StartStepFailure("trim apt sources", step1);
+                return;
+            }
+
+            // Step 2/4: Reinstall dependencies (via Termux shell, up to 3 min)
+            setU2StatusText(getString(R.string.botdrop_u2_service_prepare_step_prepare_env));
+            mBotDropService.executeU2SetupCommand(buildReinstallDependenciesCommand(), 180, step2 -> {
+                if (!isUiAvailable()) return;
+                if (step2 == null || !step2.success) {
+                    handleU2StartStepFailure("reinstall dependencies", step2);
+                    return;
+                }
+
+                // Step 3/4: Install u2automator from GitHub (via Termux shell, up to 10 min)
+                setU2StatusText(getString(R.string.botdrop_u2_service_prepare_step_verify));
+                mBotDropService.executeU2SetupCommand(buildInstallU2AutomatorCommand(), 600, step3 -> {
+                    if (!isUiAvailable()) return;
+                    if (step3 == null || !step3.success) {
+                        handleU2StartStepFailure("install u2automator", step3);
+                        return;
+                    }
+
+                    // Step 4/4: Start u2.jar (via Shizuku)
+                    startU2Jar();
+                });
+            });
+        });
+    }
+
+    private void handleU2StartStepFailure(String stepName,
+            @Nullable BotDropService.CommandResult result) {
+        String reason = resolveCommandFailure(result);
+        runOnUiThread(() -> {
+            if (!isUiAvailable()) return;
+            String message = getString(R.string.botdrop_u2_service_start_failed) + ": " + reason;
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            setU2StatusText(message);
+            Logger.logWarn(LOG_TAG, "u2 start failed at [" + stepName + "]: " + reason);
+            checkU2ServiceStatus();
+        });
+    }
+
+    private void setU2StatusText(@Nullable String text) {
+        if (mU2StatusText == null) {
+            return;
+        }
+        runOnUiThread(() -> mU2StatusText.setText(text));
+    }
+
+    private String buildTrimAptSourcesForU2Command() {
+        return "export PREFIX=\"" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\"\n"
+            + "APT_SOURCES_LIST=\"$PREFIX/etc/apt/sources.list\"\n"
+            + "APT_SOURCES_LIST_D=\"$PREFIX/etc/apt/sources.list.d\"\n"
+            + "if [ -f \"$APT_SOURCES_LIST\" ]; then\n"
+            + "  sed -i '/zhixianio/!d' \"$APT_SOURCES_LIST\"\n"
+            + "fi\n"
+            + "if [ -d \"$APT_SOURCES_LIST_D\" ]; then\n"
+            + "  for f in \"$APT_SOURCES_LIST_D\"/*.list; do\n"
+            + "    [ -f \"$f\" ] || continue\n"
+            + "    sed -i '/zhixianio/!d' \"$f\"\n"
+            + "  done\n"
+            + "fi\n"
+            + "if ! grep -R -n \"zhixianio\" \"$APT_SOURCES_LIST\" \"$APT_SOURCES_LIST_D\" 2>/dev/null | grep -q .; then\n"
+            + "  echo \"No zhixianio apt source found\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "echo \"apt sources prepared\"\n";
+    }
+
+    private String buildReinstallDependenciesCommand() {
+        return "export PREFIX=\"" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\"\n"
+            + "export PATH=\"$PREFIX/bin:$PATH\"\n"
+            + "if ! command -v apt >/dev/null 2>&1; then\n"
+            + "  echo \"apt command unavailable\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "apt update\n"
+            + "apt install -y --reinstall python python-pip libxml2 libxslt libicu zlib libjpeg-turbo\n"
+            + "if ! command -v pip >/dev/null 2>&1 && ! command -v pip3 >/dev/null 2>&1; then\n"
+            + "  echo \"pip not available after reinstall\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "echo \"dependencies reinstalled\"\n";
+    }
+
+    private String buildCheckU2AutomatorInstalledCommand() {
+        return "export PREFIX=\"" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\"\n"
+            + "export PATH=\"$PREFIX/bin:$PATH\"\n"
+            + "if command -v pip >/dev/null 2>&1; then\n"
+            + "  pip show uiautomator2 >/dev/null 2>&1 && echo \"installed\" && exit 0\n"
+            + "fi\n"
+            + "if command -v pip3 >/dev/null 2>&1; then\n"
+            + "  pip3 show uiautomator2 >/dev/null 2>&1 && echo \"installed\" && exit 0\n"
+            + "fi\n"
+            + "echo \"not installed\" >&2\n"
+            + "exit 1\n";
+    }
+
+    private String buildInstallU2AutomatorCommand() {
+        return "export PREFIX=\"" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\"\n"
+            + "export PATH=\"$PREFIX/bin:$PATH\"\n"
+            + "if command -v pip >/dev/null 2>&1; then\n"
+            + "  PIP_CMD=pip\n"
+            + "elif command -v pip3 >/dev/null 2>&1; then\n"
+            + "  PIP_CMD=pip3\n"
+            + "else\n"
+            + "  echo \"pip not found\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "$PIP_CMD install --no-cache-dir git+https://github.com/lay2dev/uiautomator2.git\n"
+            + "echo \"u2automator installed\"\n";
+    }
+
+    private void stopU2Service() {
+        if (mBotDropService == null || !mBound) {
+            Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        setU2ServiceButtonsState(false, false);
+        mU2StatusText.setText(getString(R.string.botdrop_u2_service_status_checking));
+        Toast.makeText(this, getString(R.string.botdrop_u2_service_stopping), Toast.LENGTH_SHORT).show();
+
+        executeShizukuShellCommand(buildStopU2Command(), result -> {
+            if (!isUiAvailable()) {
+                return;
+            }
+
+            runOnUiThread(() -> {
+                if (!isUiAvailable() || mBotDropService == null) {
+                    return;
+                }
+
+                if (result == null) {
+                    Toast.makeText(
+                            this,
+                            getString(R.string.botdrop_u2_service_stop_failed),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    Logger.logWarn(LOG_TAG, "Stop u2 command returned null result");
+                    checkU2ServiceStatus();
+                    return;
+                }
+
+                if (result.success) {
+                    Toast.makeText(
+                            this,
+                            getString(R.string.botdrop_u2_service_stop_command_sent),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    mHandler.postDelayed(this::checkU2ServiceStatus, SERVICE_REFRESH_DELAY_MS);
+                } else {
+                    String shownReason = TextUtils.isEmpty(result.stderr) ? getString(R.string.botdrop_unknown) : result.stderr;
+                    Toast.makeText(
+                            this,
+                            getString(R.string.botdrop_u2_service_stop_failed) + ": " + shownReason,
+                            Toast.LENGTH_LONG
+                    ).show();
+                    Logger.logWarn(LOG_TAG, "Stop u2 service failed: " + shownReason);
+                    checkU2ServiceStatus();
+                }
+            });
+        });
+    }
+
+    private void setU2ServiceButtonsState(boolean startEnabled, boolean stopEnabled) {
+        if (!isUiAvailable()) {
+            return;
+        }
+
+        if (mStartU2ServiceButton != null) {
+            mStartU2ServiceButton.setEnabled(startEnabled);
+            mStartU2ServiceButton.setAlpha(startEnabled ? 1f : 0.6f);
+        }
+
+        if (mStopU2ServiceButton != null) {
+            mStopU2ServiceButton.setEnabled(stopEnabled);
+            mStopU2ServiceButton.setAlpha(stopEnabled ? 1f : 0.6f);
+        }
+    }
+
+    private ServiceStateResult queryHttpEndpoint(String url, @Nullable String authorizationHeader) {
+        HttpURLConnection connection = null;
+        try {
+            URL target = new URL(url);
+            connection = (HttpURLConnection) target.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout((int) SERVICE_STATUS_TIMEOUT_MS);
+            connection.setReadTimeout((int) SERVICE_STATUS_TIMEOUT_MS);
+
+            if (!TextUtils.isEmpty(authorizationHeader)) {
+                connection.setRequestProperty("Authorization", authorizationHeader);
+            }
+
+            int code = connection.getResponseCode();
+            if (code == HttpURLConnection.HTTP_OK) {
+                return new ServiceStateResult(true, null);
+            }
+            return new ServiceStateResult(false, String.valueOf(code));
+        } catch (Throwable e) {
+            return new ServiceStateResult(false, e.getMessage());
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    @Nullable
+    private String readShizukuBridgeToken() {
+        File tokenFile = new File(SHIZUKU_BRIDGE_CONFIG_PATH);
+        if (!tokenFile.exists()) {
+            return null;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(tokenFile)))) {
+            StringBuilder jsonContent = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                jsonContent.append(line);
+            }
+
+            if (TextUtils.isEmpty(jsonContent.toString())) {
+                return null;
+            }
+
+            JSONObject config = new JSONObject(jsonContent.toString());
+            String token = config.optString("token", "");
+            return TextUtils.isEmpty(token) ? null : token;
+        } catch (Throwable e) {
+            Logger.logWarn(LOG_TAG, "Failed to read shizuku bridge token: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String buildStartU2Command() {
+        return "TARGET_JAR=\"" + U2_RUNTIME_JAR_PATH + "\"\n"
+            + "if [ ! -f \"$TARGET_JAR\" ]; then\n"
+            + "  echo \"u2.jar not found\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "if [ -f \"" + U2_PID_FILE + "\" ]; then\n"
+            + "  PID=$(cat " + U2_PID_FILE + " 2>/dev/null || true)\n"
+            + "  if [ -n \"$PID\" ] && kill -0 \"$PID\" 2>/dev/null; then\n"
+            + "    echo \"u2 already running\"\n"
+            + "    exit 0\n"
+            + "  fi\n"
+            + "  rm -f " + U2_PID_FILE + "\n"
+            + "fi\n"
+            + "U2_RUNNING_PID=\"\"\n"
+            + "for CANDIDATE in $(pidof app_process 2>/dev/null || true); do\n"
+            + "  CMDLINE=$(tr '\\0' ' ' < /proc/$CANDIDATE/cmdline 2>/dev/null || true)\n"
+            + "  case \"$CMDLINE\" in\n"
+            + "    *\"/ com.wetest.uia2.Main\"*)\n"
+            + "      U2_RUNNING_PID=\"$CANDIDATE\"\n"
+            + "      break\n"
+            + "      ;;\n"
+            + "  esac\n"
+            + "done\n"
+            + "if [ -n \"$U2_RUNNING_PID\" ]; then\n"
+            + "  echo \"$U2_RUNNING_PID\" > " + U2_PID_FILE + "\n"
+            + "  echo \"u2 already running\"\n"
+            + "  exit 0\n"
+            + "fi\n"
+            + "CLASSPATH=\"$TARGET_JAR\" app_process / com.wetest.uia2.Main >/dev/null 2>&1 </dev/null &\n"
+            + "U2_PID=$!\n"
+            + "sleep 1\n"
+            + "if [ -n \"$U2_PID\" ] && [ \"$U2_PID\" -gt 0 ]; then\n"
+            + "  echo $U2_PID > " + U2_PID_FILE + "\n"
+            + "fi\n"
+            + "if [ -z \"$U2_PID\" ] || ! kill -0 \"$U2_PID\" 2>/dev/null; then\n"
+            + "  echo \"Failed to start u2 service\" >&2\n"
+            + "  exit 1\n"
+            + "fi\n"
+            + "echo \"u2 started\"\n";
+    }
+
+    private String buildCheckU2StatusCommand() {
+        return "RUNNING=0\n"
+            + "for CANDIDATE in $(pidof app_process 2>/dev/null || true); do\n"
+            + "  CMDLINE=$(tr '\\0' ' ' < /proc/$CANDIDATE/cmdline 2>/dev/null || true)\n"
+            + "  case \"$CMDLINE\" in\n"
+            + "    *\"/ com.wetest.uia2.Main\"*)\n"
+            + "      RUNNING=1\n"
+            + "      break\n"
+            + "      ;;\n"
+            + "  esac\n"
+            + "done\n"
+            + "if ss -ltn 2>/dev/null | grep -q ':9008'; then\n"
+            + "  RUNNING=1\n"
+            + "fi\n"
+            + "if [ \"$RUNNING\" -eq 1 ]; then\n"
+            + "  echo \"running\"\n"
+            + "else\n"
+            + "  echo \"stopped\"\n"
+            + "fi\n";
+    }
+
+    private String ensureU2JarFromAssets() {
+        File targetFile = new File(U2_RUNTIME_JAR_PATH);
+        File outputDir = targetFile.getParentFile();
+        if (outputDir == null || !outputDir.exists() && !outputDir.mkdirs()) {
+            return "Cannot create directory for u2 jar: " + U2_RUNTIME_JAR_PATH;
+        }
+
+        if (targetFile.exists() && targetFile.length() > 0) {
+            return null;
+        }
+
+        try (InputStream input = getAssets().open(U2_ASSET_PATH);
+             OutputStream output = new FileOutputStream(targetFile)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = input.read(buffer)) != -1) {
+                output.write(buffer, 0, bytesRead);
+            }
+            output.flush();
+            return null;
+        } catch (Throwable e) {
+            Logger.logWarn(LOG_TAG, "Failed to copy u2.jar from assets: " + e.getMessage());
+            return e.getMessage();
+        }
+    }
+
+    private String buildStopU2Command() {
+        return "if [ -f \"" + U2_PID_FILE + "\" ]; then\n"
+            + "  PID=$(cat " + U2_PID_FILE + " 2>/dev/null || true)\n"
+            + "  if [ -n \"$PID\" ]; then\n"
+            + "    kill \"$PID\" 2>/dev/null || true\n"
+            + "  fi\n"
+            + "  rm -f " + U2_PID_FILE + "\n"
+            + "fi\n"
+            + "for CANDIDATE in $(pidof app_process 2>/dev/null || true); do\n"
+            + "  CMDLINE=$(tr '\\0' ' ' < /proc/$CANDIDATE/cmdline 2>/dev/null || true)\n"
+            + "  case \"$CMDLINE\" in\n"
+            + "    *\"/ com.wetest.uia2.Main\"*)\n"
+            + "      kill \"$CANDIDATE\" 2>/dev/null || true\n"
+            + "      ;;\n"
+            + "  esac\n"
+            + "done\n"
+            + "sleep 1\n"
+            + "for CANDIDATE in $(pidof app_process 2>/dev/null || true); do\n"
+            + "  CMDLINE=$(tr '\\0' ' ' < /proc/$CANDIDATE/cmdline 2>/dev/null || true)\n"
+            + "  case \"$CMDLINE\" in\n"
+            + "    *\"/ com.wetest.uia2.Main\"*)\n"
+            + "      kill -9 \"$CANDIDATE\" 2>/dev/null || true\n"
+            + "      ;;\n"
+            + "  esac\n"
+            + "done\n"
+            + "echo \"u2 stop requested\"\n";
+    }
+
+    private void executeShizukuShellCommand(String command, BotDropService.CommandCallback callback) {
+        executeShizukuShellCommand(command, SHIZUKU_SHELL_COMMAND_TIMEOUT_MS, callback);
+    }
+
+    private void executeShizukuShellCommand(
+        String command,
+        long timeoutMs,
+        BotDropService.CommandCallback callback
+    ) {
+        new Thread(() -> {
+            if (mShizukuShellExecutor == null) {
+                runOnUiThread(() -> {
+                    if (callback != null) {
+                        callback.onResult(new BotDropService.CommandResult(false, "", "Shizuku shell executor not initialized", -1));
+                    }
+                });
+                return;
+            }
+
+            if (!mShizukuShellExecutor.isBound()) {
+                if (!mShizukuShellExecutor.waitForConnection(SHIZUKU_SHELL_CONNECT_TIMEOUT_MS)) {
+                    runOnUiThread(() -> {
+                        if (callback != null) {
+                            callback.onResult(new BotDropService.CommandResult(false, "", "Shizuku shell unavailable", -1));
+                        }
+                    });
+                    return;
+                }
+            }
+
+            int timeout = timeoutMs <= 0 || timeoutMs > Integer.MAX_VALUE
+                    ? (int) SHIZUKU_SHELL_COMMAND_TIMEOUT_MS
+                    : (int) timeoutMs;
+
+            mShizukuShellExecutor.execute(command, timeout, result -> {
+                if (callback == null) {
+                    return;
+                }
+                runOnUiThread(() -> callback.onResult(
+                    new BotDropService.CommandResult(
+                        result.success,
+                        result.stdout == null ? "" : result.stdout,
+                        result.stderr == null ? "" : result.stderr,
+                        result.exitCode
+                    )
+                ));
+            });
+        }).start();
+    }
+
+    private String resolveCommandFailure(@Nullable BotDropService.CommandResult result) {
+        if (result == null) {
+            return getString(R.string.botdrop_unknown);
+        }
+
+        if (!TextUtils.isEmpty(result.stderr)) {
+            return result.stderr;
+        }
+        if (!TextUtils.isEmpty(result.stdout)) {
+            return result.stdout;
+        }
+        return "exit " + result.exitCode;
+    }
+
+    private void runShizukuPermissionButtonStateBusy(boolean busy, @Nullable String busyText) {
+        if (mShizukuPermissionButton == null) {
+            return;
+        }
+        mShizukuPermissionButton.setEnabled(!busy);
+        mShizukuPermissionButton.setAlpha(busy ? 0.6f : 1f);
+        if (busyText != null) {
+            mShizukuPermissionButton.setText(busyText);
+        } else {
+            mShizukuPermissionButton.setText(getString(R.string.action_request_shizuku_permission));
+        }
+    }
+
+    private boolean isUiAvailable() {
+        return !isFinishing();
+    }
+
+    private boolean startOfficialShizukuHome() {
+        if (startShizukuActivity(new Intent(this, MainActivity.class))) {
+            return true;
+        }
+
+        Intent launcherIntent = resolveShizukuManagerLauncherActivity();
+        if (launcherIntent != null && startShizukuActivity(launcherIntent)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private Intent resolveShizukuManagerLauncherActivity() {
+        Intent launcherIntent = new Intent(Intent.ACTION_MAIN);
+        launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        launcherIntent.setPackage(getPackageName());
+
+        List<ResolveInfo> activities = getPackageManager().queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL);
+        if (activities == null) {
+            return null;
+        }
+
+        for (ResolveInfo activity : activities) {
+            if (activity.activityInfo == null) {
+                continue;
+            }
+
+            String className = activity.activityInfo.name;
+            if (className != null && className.startsWith("moe.shizuku.manager")) {
+                return new Intent(launcherIntent).setClassName(activity.activityInfo.packageName, className);
+            }
+        }
+        return null;
+    }
+
+    private boolean startShizukuActivity(Intent intent) {
+        try {
+            startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            Logger.logWarn(LOG_TAG, "Internal Shizuku home not found: " + intent);
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "Failed to open internal Shizuku home: " + intent + ", " + e.getMessage());
+        }
+        return false;
+    }
+
+    private static class ServiceStateResult {
+        final boolean running;
+        final String message;
+
+        private ServiceStateResult(boolean running, @Nullable String message) {
+            this.running = running;
+            this.message = message;
+        }
+    }
+}

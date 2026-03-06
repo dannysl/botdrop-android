@@ -201,10 +201,12 @@
                     android:gravity="center_vertical"
                     android:layout_marginTop="8dp">
 
-                    <TextView
+                    <Button
                         android:id="@+id/btn_view_openclaw_log"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textAllCaps="false"
                         android:text="@string/botdrop_view_log"
                         android:textSize="13sp"
                         android:textColor="#1A1A1A"
@@ -215,27 +217,49 @@
                         android:background="@drawable/botdrop_button_bg"
                         android:gravity="center"
                         android:minHeight="32dp"
-                        android:layout_marginEnd="8dp"
+                        android:layout_marginEnd="6dp"
                         android:clickable="true"
                         android:focusable="true" />
 
-                    <TextView
-                        android:id="@+id/btn_open_openclaw_web_ui"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/botdrop_open_web_ui"
+                    <Button
+                    android:id="@+id/btn_open_openclaw_web_ui"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAllCaps="false"
+                    android:text="@string/botdrop_open_web_ui"
                         android:textSize="13sp"
                         android:textColor="#1A1A1A"
                         android:paddingStart="10dp"
                         android:paddingEnd="10dp"
                         android:paddingTop="7dp"
                         android:paddingBottom="7dp"
-                        android:background="@drawable/botdrop_button_bg"
-                        android:gravity="center"
-                        android:minHeight="32dp"
-                        android:clickable="true"
-                        android:focusable="true" />
-                </LinearLayout>
+                    android:background="@drawable/botdrop_button_bg"
+                    android:gravity="center"
+                    android:minHeight="32dp"
+                    android:layout_marginEnd="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <Button
+                    android:id="@+id/btn_open_automation_panel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAllCaps="false"
+                    android:text="@string/botdrop_open_automation_panel"
+                    android:textSize="13sp"
+                    android:textColor="#1A1A1A"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="7dp"
+                    android:paddingBottom="7dp"
+                    android:background="@drawable/botdrop_button_bg"
+                    android:gravity="center"
+                    android:minHeight="32dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -609,28 +633,6 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp"
                 android:text="@string/botdrop_open_terminal"
-                android:textAllCaps="false"
-                android:background="@drawable/botdrop_button_outline_bg"
-                android:textColor="@color/botdrop_accent" />
-
-            <Button
-                android:id="@+id/btn_open_shizuku"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:text="@string/action_open_shizuku_status"
-                android:textAllCaps="false"
-                android:background="@drawable/botdrop_button_bg"
-                android:textColor="#1A1A1A" />
-
-            <Button
-                android:id="@+id/btn_request_shizuku_permission"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:text="@string/action_request_shizuku_permission"
                 android:textAllCaps="false"
                 android:background="@drawable/botdrop_button_outline_bg"
                 android:textColor="@color/botdrop_accent" />

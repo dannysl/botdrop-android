@@ -44,6 +44,7 @@ public class BotDropService extends Service {
     private final IBinder mBinder = new LocalBinder();
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService mSharpInstallExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService mU2SetupExecutor = Executors.newSingleThreadExecutor();
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final ShizukuManager mShizukuManager = ShizukuManager.getInstance();
     private ShizukuShellExecutor mShizukuExecutor;
@@ -154,6 +155,36 @@ public class BotDropService extends Service {
     public void executeCommand(String command, CommandCallback callback) {
         mExecutor.execute(() -> {
             CommandResult result = executeCommandSync(command);
+            mHandler.post(() -> callback.onResult(result));
+        });
+    }
+
+    /**
+     * Execute a shell command in the Termux environment with custom timeout in seconds
+     */
+    public void executeCommand(String command, int timeoutSeconds, CommandCallback callback) {
+        mExecutor.execute(() -> {
+            CommandResult result = executeCommandSync(command, timeoutSeconds);
+            mHandler.post(() -> callback.onResult(result));
+        });
+    }
+
+    /**
+     * Execute a shell command on the dedicated u2 setup executor (does not block mExecutor).
+     */
+    public void executeU2SetupCommand(String command, CommandCallback callback) {
+        mU2SetupExecutor.execute(() -> {
+            CommandResult result = executeCommandSync(command);
+            mHandler.post(() -> callback.onResult(result));
+        });
+    }
+
+    /**
+     * Execute a shell command on the dedicated u2 setup executor with custom timeout in seconds.
+     */
+    public void executeU2SetupCommand(String command, int timeoutSeconds, CommandCallback callback) {
+        mU2SetupExecutor.execute(() -> {
+            CommandResult result = executeCommandSync(command, timeoutSeconds);
             mHandler.post(() -> callback.onResult(result));
         });
     }
@@ -622,7 +653,7 @@ public class BotDropService extends Service {
         // This matters for in-place upgrades where users won't re-run channel setup.
         BotDropConfig.sanitizeLegacyConfig();
 
-        // Deploy built-in skills (e.g. shizuku-automation) before starting gateway
+        // Deploy built-in skills (e.g. botdrop-u2) before starting gateway
         deployBuiltinSkills();
 
         mExecutor.execute(() -> {
