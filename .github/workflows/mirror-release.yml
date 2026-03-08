@@ -27,7 +27,7 @@ jobs:
           mkdir -p /tmp/assets
           gh release download "$TAG" -D /tmp/assets -R "${{ github.repository }}" || exit 0
 
-          # Upload each asset to GitLab (skip .sig and latest.json)
+          # Upload each asset to GitLab
           for file in /tmp/assets/*; do
             [ -f "$file" ] || continue
             filename=$(basename "$file")
@@ -36,18 +36,35 @@ jobs:
               *.sig|latest.json) echo "Skip: $filename"; continue ;;
             esac
 
-            echo "Uploading: $filename ..."
+            filesize=$(stat -c%s "$file")
+            echo "Uploading: $filename ($(numfmt --to=iec $filesize))..."
 
-            # Upload file (force HTTP/1.1 for large file stability)
-            upload_url=$(curl --http1.1 --fail-with-body -X POST \
-              "https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/uploads" \
-              -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-              -F "file=@${file}" | jq -r '.full_path')
+            # Files >100MB use Package Registry, smaller use regular uploads
+            if [ "$filesize" -gt 104857600 ]; then
+              # Use Generic Package Registry for large files
+              curl --http1.1 --fail-with-body -X PUT \
+                "https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/packages/generic/botdrop-android/${TAG}/${filename}" \
+                -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+                -H "Content-Type: application/octet-stream" \
+                --data-binary "@${file}"
+
+              asset_url="https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/packages/generic/botdrop-android/${TAG}/${filename}"
+              link_type="package"
+            else
+              # Regular upload for smaller files
+              upload_url=$(curl --http1.1 --fail-with-body -X POST \
+                "https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/uploads" \
+                -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+                -F "file=@${file}" | jq -r '.full_path')
+
+              asset_url="https://gitlab.com${upload_url}"
+              link_type="other"
+            fi
 
             # Link to release
             curl --fail-with-body -X POST \
               "https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/releases/${TAG}/assets/links" \
               -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "{\"name\": \"${filename}\", \"url\": \"https://gitlab.com${upload_url}\"}"
+              -d "{\"name\": \"${filename}\", \"url\": \"${asset_url}\", \"link_type\": \"${link_type}\"}"
           done
