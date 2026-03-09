@@ -112,6 +112,25 @@ Rules:
 2. Fall back to `set_text` only if FastInputIME is unavailable
 3. Verify send/post button visibility after input
 
+### FastInputIME broadcast contract (important)
+
+When `send_keys` is used, `uiautomator2` sends an ADB broadcast using these exact contracts:
+
+| Operation | Action | Param |
+| - | - | - |
+| input text | `ADB_KEYBOARD_INPUT_TEXT` | `--es text` |
+| set/replace text (clear + input) | `ADB_KEYBOARD_SET_TEXT` | `--es text` |
+| clear text | `ADB_KEYBOARD_CLEAR_TEXT` | no param |
+| key event | `ADB_KEYBOARD_INPUT_KEYCODE` | `--ei code` |
+
+- Do not use `--es msg` for text; only `text` is accepted.
+- `text` payload must be Base64 encoded.
+- Example:
+  - `TEXT=$(printf '%s' "周末的雨" | base64)`
+  - `am broadcast -a ADB_KEYBOARD_SET_TEXT --es text "$TEXT"`
+
+If broadcast does not take effect, verify action name and `text` parameter first. `ADB_INPUT_TEXT`/`--es msg` is invalid here and can silently fail.
+
 ## Debug Checklist (tap has no effect)
 
 1. Verify `app_current()` change

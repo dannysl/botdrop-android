@@ -482,35 +482,6 @@ public final class TermuxInstaller {
                 "echo \"BOTDROP_INFO:Node $NODE_V, npm $NPM_V\"\n" +
                 "echo \"BOTDROP_STEP:1:DONE\"\n\n" +
                 "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
-                "# Install sharp native addon (optional, non-fatal)\n" +
-                "# Remove dpkg-perl/dpkg-scanpackages which depend on clang from Termux main repo\n" +
-                "# (com.termux paths conflict with app.botdrop). Not needed for normal operation.\n" +
-                "if dpkg -s dpkg-scanpackages >/dev/null 2>&1; then\n" +
-                "    dpkg -r dpkg-scanpackages 2>/dev/null || true\n" +
-                "fi\n" +
-                "if dpkg -s dpkg-perl >/dev/null 2>&1; then\n" +
-                "    dpkg -r dpkg-perl 2>/dev/null || true\n" +
-                "fi\n" +
-                "APT_UPDATE_OUTPUT=$(apt update -o Dir::Etc::sourcelist=\"$PREFIX/etc/apt/sources.list.d/botdrop.list\" -o Dir::Etc::sourceparts=\"-\" 2>&1)\n" +
-                "APT_UPDATE_EXIT=$?\n" +
-                "if [ $APT_UPDATE_EXIT -ne 0 ]; then\n" +
-                "    echo \"BOTDROP_WARN:apt update failed (exit $APT_UPDATE_EXIT): $APT_UPDATE_OUTPUT\"\n" +
-                "    echo \"BOTDROP_WARN:skip sharp installation\"\n" +
-                "else\n" +
-                "APT_OUTPUT=$(apt install -y -o Dir::Etc::sourcelist=\"$PREFIX/etc/apt/sources.list.d/botdrop.list\" -o Dir::Etc::sourceparts=\"-\" sharp-node-addon 2>&1)\n" +
-                "APT_EXIT=$?\n" +
-                "if [ $APT_EXIT -eq 0 ]; then\n" +
-                "    NPM_SHARP=$(npm install -g sharp@0.34.5 --ignore-scripts 2>&1)\n" +
-                "    NPM_SHARP_EXIT=$?\n" +
-                "    if [ $NPM_SHARP_EXIT -ne 0 ]; then\n" +
-                "        echo \"BOTDROP_WARN:sharp npm install failed (exit $NPM_SHARP_EXIT): $NPM_SHARP\"\n" +
-                "    else\n" +
-                "        echo \"BOTDROP_INFO:sharp installed\"\n" +
-                "    fi\n" +
-                "else\n" +
-                "    echo \"BOTDROP_WARN:sharp-node-addon install failed (exit $APT_EXIT): $APT_OUTPUT\"\n" +
-                "fi\n" +
-                "fi\n" +
                 "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
                 "\n" +
                 "NPM_OUTPUT=$(" + OpenclawVersionUtils.buildNpmInstallCommand(openclawVersion) + " 2>&1)\n" +
