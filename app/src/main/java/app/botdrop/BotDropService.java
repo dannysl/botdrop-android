@@ -170,6 +170,17 @@ public class BotDropService extends Service {
     }
 
     /**
+     * Run ensureSharpInstalled synchronously on the u2 setup executor.
+     * This also cleans up broken dpkg-perl/dpkg-scanpackages dependencies.
+     */
+    public void runEnsureSharpInstalled(CommandCallback callback) {
+        mU2SetupExecutor.execute(() -> {
+            ensureSharpInstalled();
+            mHandler.post(() -> callback.onResult(new CommandResult(true, "done", "", 0)));
+        });
+    }
+
+    /**
      * Execute a shell command on the dedicated u2 setup executor (does not block mExecutor).
      */
     public void executeU2SetupCommand(String command, CommandCallback callback) {

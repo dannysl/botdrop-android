@@ -490,18 +490,24 @@ public class AutomationPanelActivity extends Activity {
                 return;
             }
 
-            // Check if u2automator is already installed
-            setU2StatusText(getString(R.string.botdrop_u2_service_status_checking));
-            mBotDropService.executeU2SetupCommand(buildCheckU2AutomatorInstalledCommand(), checkResult -> {
+            // Pre-step: ensure sharp is installed (also cleans broken dpkg-perl dependency)
+            setU2StatusText(getString(R.string.botdrop_u2_service_prepare_step_prepare_env));
+            mBotDropService.runEnsureSharpInstalled(sharpResult -> {
                 if (!isUiAvailable()) return;
-                if (checkResult != null && checkResult.success) {
-                    // Already installed – skip to step 4, still install IME
-                    Logger.logInfo(LOG_TAG, "u2automator already installed, skipping steps 1-3");
-                    installAdbKeyboardIme(() -> startU2Jar());
-                } else {
-                    // Not installed – run full setup steps 1-3 then start
-                    runU2SetupSteps();
-                }
+
+                // Check if u2automator is already installed
+                setU2StatusText(getString(R.string.botdrop_u2_service_status_checking));
+                mBotDropService.executeU2SetupCommand(buildCheckU2AutomatorInstalledCommand(), checkResult -> {
+                    if (!isUiAvailable()) return;
+                    if (checkResult != null && checkResult.success) {
+                        // Already installed – skip to step 4, still install IME
+                        Logger.logInfo(LOG_TAG, "u2automator already installed, skipping steps 1-3");
+                        installAdbKeyboardIme(() -> startU2Jar());
+                    } else {
+                        // Not installed – run full setup steps 1-3 then start
+                        runU2SetupSteps();
+                    }
+                });
             });
         }).start();
     }
