@@ -10,6 +10,7 @@ public class ChannelConfigMeta {
     public static final String PLATFORM_TELEGRAM = "telegram";
     public static final String PLATFORM_DISCORD = "discord";
     public static final String PLATFORM_FEISHU = "feishu";
+    public static final String PLATFORM_QQBOT = "qqbot";
 
     public final String platform;
     public final int titleRes;
@@ -49,6 +50,9 @@ public class ChannelConfigMeta {
         }
         if (PLATFORM_FEISHU.equals(platform)) {
             return feishu();
+        }
+        if (PLATFORM_QQBOT.equals(platform)) {
+            return qqbot();
         }
         return telegram();
     }
@@ -95,6 +99,20 @@ public class ChannelConfigMeta {
         );
     }
 
+    public static ChannelConfigMeta qqbot() {
+        return new ChannelConfigMeta(
+            PLATFORM_QQBOT,
+            R.string.botdrop_platform_qqbot,
+            "https://q.qq.com/",
+            R.string.botdrop_app_id,
+            R.string.botdrop_qqbot_app_id_hint,
+            R.string.botdrop_app_secret,
+            R.string.botdrop_qqbot_app_secret_hint,
+            R.string.botdrop_qqbot_steps,
+            true
+        );
+    }
+
     public boolean isTokenValid(String token) {
         if (token == null || token.trim().isEmpty()) {
             return false;
@@ -113,6 +131,9 @@ public class ChannelConfigMeta {
             return false;
         }
         if (PLATFORM_FEISHU.equals(platform)) {
+            return true;
+        }
+        if (PLATFORM_QQBOT.equals(platform)) {
             return true;
         }
         return ownerId.matches("^\\d+$");

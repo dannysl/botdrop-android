@@ -24,7 +24,8 @@ public class ChannelFragment extends Fragment {
     private static final int[] TAB_TITLE_IDS = {
         R.string.botdrop_platform_telegram,
         R.string.botdrop_platform_discord,
-        R.string.botdrop_platform_feishu
+        R.string.botdrop_platform_feishu,
+        R.string.botdrop_platform_qqbot
     };
 
     private TabLayout mChannelTabs;
@@ -76,6 +77,9 @@ public class ChannelFragment extends Fragment {
         }
         if (ChannelConfigMeta.PLATFORM_FEISHU.equals(platform)) {
             return ChannelPagerAdapter.PAGE_FEISHU;
+        }
+        if (ChannelConfigMeta.PLATFORM_QQBOT.equals(platform)) {
+            return ChannelPagerAdapter.PAGE_QQBOT;
         }
         return ChannelPagerAdapter.PAGE_TELEGRAM;
     }

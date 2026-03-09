@@ -32,7 +32,7 @@ import org.json.JSONObject;
 import java.util.Iterator;
 
 /**
- * Base class for channel configuration pages (Telegram/Discord/Feishu).
+ * Base class for channel configuration pages (Telegram/Discord/Feishu/QQ Bot).
  */
 public abstract class ChannelFormFragment extends Fragment {
 
@@ -243,6 +243,8 @@ public abstract class ChannelFormFragment extends Fragment {
                 showError(getString(R.string.botdrop_error_enter_valid_bot_token));
             } else if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 showError(getString(R.string.botdrop_error_enter_app_id));
+            } else if (ChannelConfigMeta.PLATFORM_QQBOT.equals(mMeta.platform)) {
+                showError(getString(R.string.botdrop_error_enter_qqbot_app_id));
             } else {
                 showError(getString(R.string.botdrop_error_enter_token));
             }
@@ -252,6 +254,8 @@ public abstract class ChannelFormFragment extends Fragment {
         if (!mMeta.isOwnerValid(ownerId)) {
             if (ChannelConfigMeta.PLATFORM_FEISHU.equals(mMeta.platform)) {
                 showError(getString(R.string.botdrop_error_enter_app_secret));
+            } else if (ChannelConfigMeta.PLATFORM_QQBOT.equals(mMeta.platform)) {
+                showError(getString(R.string.botdrop_error_enter_qqbot_app_secret));
             } else {
                 showError(getString(R.string.botdrop_error_enter_owner_id));
             }
@@ -283,6 +287,8 @@ public abstract class ChannelFormFragment extends Fragment {
                 ownerId,
                 feishuUserId
             );
+        } else if (ChannelConfigMeta.PLATFORM_QQBOT.equals(mMeta.platform)) {
+            success = ChannelSetupHelper.writeQQBotChannelConfig(token, ownerId);
         } else {
             success = ChannelSetupHelper.writeChannelConfig(
                 mMeta.platform,
@@ -337,6 +343,9 @@ public abstract class ChannelFormFragment extends Fragment {
                 token = extractFeishuAppIdFromChannelConfig(channelConfig);
                 owner = extractFeishuAppSecretFromChannelConfig(channelConfig);
                 feishuUserId = extractFeishuUserIdFromChannelConfig(channelConfig);
+            } else if (ChannelConfigMeta.PLATFORM_QQBOT.equals(mMeta.platform)) {
+                token = extractQQBotAppIdFromChannelConfig(channelConfig);
+                owner = extractQQBotClientSecretFromChannelConfig(channelConfig);
             } else {
                 token = channelConfig.optString("botToken", null);
                 if (TextUtils.isEmpty(token)) {
@@ -385,6 +394,8 @@ public abstract class ChannelFormFragment extends Fragment {
                 if ("allowlist".equals(dmPolicy) && TextUtils.isEmpty(feishuUserId)) {
                     mHasExistingConfig = false;
                 }
+            } else if (ChannelConfigMeta.PLATFORM_QQBOT.equals(mMeta.platform)) {
+                mHasExistingConfig = !TextUtils.isEmpty(token) && !TextUtils.isEmpty(owner);
             }
 
         } catch (Exception e) {
@@ -459,6 +470,22 @@ public abstract class ChannelFormFragment extends Fragment {
             }
         }
         return "";
+    }
+
+    private String extractQQBotAppIdFromChannelConfig(JSONObject channelConfig) {
+        if (channelConfig == null) {
+            return "";
+        }
+        Object appId = channelConfig.opt("appId");
+        return appId != null ? String.valueOf(appId) : "";
+    }
+
+    private String extractQQBotClientSecretFromChannelConfig(JSONObject channelConfig) {
+        if (channelConfig == null) {
+            return "";
+        }
+        Object clientSecret = channelConfig.opt("clientSecret");
+        return clientSecret != null ? String.valueOf(clientSecret) : "";
     }
 
     private void configureSkipAction() {

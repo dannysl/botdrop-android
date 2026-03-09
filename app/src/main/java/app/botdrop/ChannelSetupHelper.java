@@ -107,8 +107,8 @@ public class ChannelSetupHelper {
     // ── Channel detection helpers ──────────────────────────────────────
 
     /**
-     * Check if any channel (Telegram, Discord, or Feishu) is configured.
-     * Reads openclaw.json and checks all three platforms.
+     * Check if any channel (Telegram, Discord, Feishu, or QQ Bot) is configured.
+     * Reads openclaw.json and checks all supported platforms.
      */
     public static boolean hasAnyChannelConfigured() {
         try {
@@ -119,7 +119,8 @@ public class ChannelSetupHelper {
             }
             return isTelegramConfigured(channels.optJSONObject("telegram"))
                 || isDiscordConfigured(channels.optJSONObject("discord"))
-                || isFeishuConfigured(channels.optJSONObject("feishu"));
+                || isFeishuConfigured(channels.optJSONObject("feishu"))
+                || isQQBotConfigured(channels.optJSONObject("qqbot"));
         } catch (Exception e) {
             Logger.logError(LOG_TAG, "Failed to check channel config: " + e.getMessage());
             return false;
@@ -199,6 +200,21 @@ public class ChannelSetupHelper {
         boolean allowlistReady = "allowlist".equals(dmPolicy) && allowFrom != null && allowFrom.length() > 0;
         boolean pairingReady = "pairing".equals(dmPolicy) || dmPolicy.isEmpty();
         return allowlistReady || pairingReady;
+    }
+
+    /**
+     * Check if QQ Bot channel is configured (has appId + clientSecret).
+     */
+    public static boolean isQQBotConfigured(JSONObject qqbot) {
+        if (qqbot == null) {
+            return false;
+        }
+        if (!qqbot.optBoolean("enabled", true)) {
+            return false;
+        }
+        String appId = qqbot.optString("appId", "").trim();
+        String clientSecret = qqbot.optString("clientSecret", "").trim();
+        return !appId.isEmpty() && !clientSecret.isEmpty();
     }
 
     // ── Write helpers ───────────────────────────────────────────────────
@@ -281,6 +297,60 @@ public class ChannelSetupHelper {
             entries.put("feishu", pluginEntry);
 
             Logger.logInfo(LOG_TAG, "Writing channel config for platform: feishu");
+            return BotDropConfig.writeConfig(config);
+
+        } catch (JSONException e) {
+            Logger.logError(LOG_TAG, "Failed to write channel config: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Write QQ Bot configuration to openclaw.json.
+     *
+     * For QQ Bot:
+     * {
+     *   channels: {
+     *     qqbot: {
+     *       enabled: true,
+     *       appId: "...",
+     *       clientSecret: "..."
+     *     }
+     *   }
+     * }
+     *
+     * @param appId QQ Bot app ID
+     * @param clientSecret QQ Bot app secret
+     * @return true if successful
+     */
+    public static boolean writeQQBotChannelConfig(String appId, String clientSecret) {
+        try {
+            JSONObject config = BotDropConfig.readConfig();
+
+            if (!config.has("channels")) {
+                config.put("channels", new JSONObject());
+            }
+
+            JSONObject channels = config.getJSONObject("channels");
+            JSONObject qqbot = new JSONObject();
+            qqbot.put("enabled", true);
+            qqbot.put("appId", appId);
+            qqbot.put("clientSecret", clientSecret);
+            channels.put("qqbot", qqbot);
+
+            if (!config.has("plugins")) {
+                config.put("plugins", new JSONObject());
+            }
+            JSONObject plugins = config.getJSONObject("plugins");
+            if (!plugins.has("entries")) {
+                plugins.put("entries", new JSONObject());
+            }
+            JSONObject entries = plugins.getJSONObject("entries");
+            JSONObject pluginEntry = new JSONObject();
+            pluginEntry.put("enabled", true);
+            entries.put("qqbot", pluginEntry);
+
+            Logger.logInfo(LOG_TAG, "Writing channel config for platform: qqbot");
             return BotDropConfig.writeConfig(config);
 
         } catch (JSONException e) {

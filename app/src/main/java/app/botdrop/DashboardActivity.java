@@ -142,9 +142,11 @@ public class DashboardActivity extends Activity {
     private TextView mTelegramStatus;
     private TextView mDiscordStatus;
     private TextView mFeishuStatus;
+    private TextView mQQBotStatus;
     private View mTelegramChannelRow;
     private View mDiscordChannelRow;
     private View mFeishuChannelRow;
+    private View mQQBotChannelRow;
     private Button mStartButton;
     private Button mStopButton;
     private Button mRestartButton;
@@ -235,9 +237,11 @@ public class DashboardActivity extends Activity {
         mTelegramStatus = findViewById(R.id.telegram_status);
         mDiscordStatus = findViewById(R.id.discord_status);
         mFeishuStatus = findViewById(R.id.feishu_status);
+        mQQBotStatus = findViewById(R.id.qqbot_status);
         mTelegramChannelRow = findViewById(R.id.telegram_channel_row);
         mDiscordChannelRow = findViewById(R.id.discord_channel_row);
         mFeishuChannelRow = findViewById(R.id.feishu_channel_row);
+        mQQBotChannelRow = findViewById(R.id.qqbot_channel_row);
         mStartButton = findViewById(R.id.btn_start);
         mStopButton = findViewById(R.id.btn_stop);
         mRestartButton = findViewById(R.id.btn_restart);
@@ -304,6 +308,11 @@ public class DashboardActivity extends Activity {
         if (mFeishuChannelRow != null) {
             mFeishuChannelRow.setOnClickListener(
                 v -> openChannelConfig(ChannelConfigMeta.PLATFORM_FEISHU)
+            );
+        }
+        if (mQQBotChannelRow != null) {
+            mQQBotChannelRow.setOnClickListener(
+                v -> openChannelConfig(ChannelConfigMeta.PLATFORM_QQBOT)
             );
         }
 
@@ -1307,6 +1316,10 @@ public class DashboardActivity extends Activity {
             mFeishuStatus.setText("○ —");
             mFeishuStatus.setTextColor(ContextCompat.getColor(this, R.color.status_disconnected));
         }
+        if (mQQBotStatus != null) {
+            mQQBotStatus.setText("○ —");
+            mQQBotStatus.setTextColor(ContextCompat.getColor(this, R.color.status_disconnected));
+        }
 
         try {
             JSONObject config = BotDropConfig.readConfig();
@@ -1328,6 +1341,11 @@ public class DashboardActivity extends Activity {
             if (ChannelSetupHelper.isFeishuConfigured(channels.optJSONObject("feishu")) && mFeishuStatus != null) {
                 mFeishuStatus.setText(getString(R.string.botdrop_connected));
                 mFeishuStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
+            }
+
+            if (ChannelSetupHelper.isQQBotConfigured(channels.optJSONObject("qqbot")) && mQQBotStatus != null) {
+                mQQBotStatus.setText(getString(R.string.botdrop_connected));
+                mQQBotStatus.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             }
         } catch (Exception e) {
             Logger.logError(LOG_TAG, "Failed to load channel info: " + e.getMessage());
