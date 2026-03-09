@@ -59,8 +59,8 @@ android {
         applicationId "app.botdrop"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 9
-        versionName "0.2.7"
+        versionCode 10
+        versionName "0.2.8"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
