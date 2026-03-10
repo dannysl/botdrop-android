@@ -190,11 +190,13 @@ public class InstallFragment extends Fragment {
         mService.installOpenclaw(new BotDropService.InstallProgressCallback() {
             @Override
             public void onStepStart(int step, String message) {
+                if (!isAdded()) return;
                 updateStep(step, "●", message, false);
             }
 
             @Override
             public void onStepComplete(int step) {
+                if (!isAdded()) return;
                 updateStep(step, "✓", null, true);
             }
 
@@ -207,6 +209,7 @@ public class InstallFragment extends Fragment {
             @Override
             public void onComplete() {
                 Logger.logInfo(LOG_TAG, "Installation complete");
+                if (!isAdded()) return;
 
                 // Get and display version
                 String version = BotDropService.getOpenclawVersion();
@@ -411,6 +414,7 @@ public class InstallFragment extends Fragment {
     }
 
     private void showError(String error) {
+        if (!isAdded()) return;
         mErrorMessage.setText(error);
         mErrorContainer.setVisibility(View.VISIBLE);
         mStatusMessage.setText(getString(R.string.botdrop_installation_failed));
