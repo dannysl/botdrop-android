@@ -55,7 +55,22 @@
     public *** d(...);
 }
 
+# Keep Shizuku runtime classes untouched. Shizuku is loaded through reflection / external
+# launcher paths and must keep names and signatures in release.
+-dontobfuscate
+-keep class moe.shizuku.** {
+    <fields>;
+    <methods>;
+}
+-keep class rikka.shizuku.** {
+    <fields>;
+    <methods>;
+}
+-keep class com.termux.shizuku.** {
+    <fields>;
+    <methods>;
+}
+
 -allowaccessmodification
--repackageclasses rikka.shizuku
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

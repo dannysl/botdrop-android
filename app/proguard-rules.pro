@@ -9,6 +9,20 @@
 
 -dontobfuscate
 
+# Keep Shizuku runtime classes untouched to avoid release-only startup regressions.
+-keep class moe.shizuku.** {
+    <fields>;
+    <methods>;
+}
+-keep class rikka.shizuku.** {
+    <fields>;
+    <methods>;
+}
+-keep class com.termux.shizuku.** {
+    <fields>;
+    <methods>;
+}
+
 # Suppress warnings for hidden Android APIs used by Shizuku
 -dontwarn android.app.ActivityManagerNative
 -dontwarn android.app.ActivityThread
@@ -28,5 +42,18 @@
 -dontwarn android.view.IWindowManager
 -dontwarn com.android.internal.app.IAppOpsService
 -dontwarn com.android.org.conscrypt.Conscrypt
+# Hidden/hidden-api compatibility for Shizuku + legacy OEM paths
+-dontwarn android.app.ContentProviderHolder
+-dontwarn android.app.ContextImpl
+-dontwarn android.app.IActivityManager$ContentProviderHolder
+-dontwarn android.app.IApplicationThread
+-dontwarn android.app.IProcessObserver
+-dontwarn android.app.IProcessObserver$Stub
+-dontwarn android.app.IUidObserver
+-dontwarn android.app.IUidObserver$Stub
+-dontwarn android.app.ProfilerInfo
+-dontwarn android.content.IContentProvider
+-dontwarn android.ddm.DdmHandleAppName
+-dontwarn android.os.SELinux
 #-renamesourcefileattribute SourceFile
 #-keepattributes SourceFile,LineNumberTable

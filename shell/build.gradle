@@ -20,8 +20,9 @@ android {
             multiDexEnabled false
         }
         release {
-            minifyEnabled true
-            proguardFiles 'proguard-rules.pro'
+            // Shizuku bootstrap is loaded via native entry and shell-name based reflection.
+            // Keep it byte-for-byte in release to avoid startup regressions.
+            minifyEnabled false
         }
     }
     dependenciesInfo {

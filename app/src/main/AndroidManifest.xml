@@ -208,16 +208,6 @@
         </activity-alias>
 
         <activity
-            android:name=".shizuku.ShizukuPermissionActivity"
-            android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
-            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar">
-            <intent-filter>
-                <action android:name="${TERMUX_PACKAGE_NAME}.intent.action.REQUEST_PERMISSION" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-        <activity
             android:name=".shizuku.ShizukuStatusActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />

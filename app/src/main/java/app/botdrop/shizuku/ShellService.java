@@ -41,6 +41,8 @@ public class ShellService extends Service {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
     private static final String FALLBACK_SHARED_ROOT = "/data/local/tmp/botdrop_tmp";
     private static final String FALLBACK_TERMUX_HOME = "/data/data/app.botdrop/files/home";
+    private static final int SHIZUKU_STARTUP_RETRY_COUNT = 3;
+    private static final long SHIZUKU_STARTUP_RETRY_DELAY_MS = 300L;
 
     private final ExecutorService mStreamExecutor = Executors.newCachedThreadPool();
 
@@ -157,7 +159,7 @@ public class ShellService extends Service {
     }
 
     private Process createProcess(String command) {
-        Process shizukuProcess = createShizukuProcess(command);
+        Process shizukuProcess = createShizukuProcessWithRetry(command);
         if (shizukuProcess != null) {
             return shizukuProcess;
         }
@@ -166,7 +168,6 @@ public class ShellService extends Service {
 
     private Process createShizukuProcess(String command) {
         if (!Shizuku.pingBinder()) {
-            Logger.logWarn(LOG_TAG, "Shizuku binder not ready");
             return null;
         }
 
@@ -196,6 +197,40 @@ public class ShellService extends Service {
         } catch (Throwable e) {
             Logger.logWarn(LOG_TAG, "Shizuku process execution failed: " + e.getMessage());
             return null;
+        }
+    }
+
+    private Process createShizukuProcessWithRetry(String command) {
+        for (int attempt = 0; attempt < SHIZUKU_STARTUP_RETRY_COUNT; attempt++) {
+            if (!Shizuku.pingBinder()) {
+                if (attempt == SHIZUKU_STARTUP_RETRY_COUNT - 1) {
+                    Logger.logWarn(LOG_TAG, "Shizuku binder not ready after retry");
+                    return null;
+                }
+                sleepNoThrow(SHIZUKU_STARTUP_RETRY_DELAY_MS * (attempt + 1));
+                continue;
+            }
+
+            Process process = createShizukuProcess(command);
+            if (process != null) {
+                return process;
+            }
+
+            if (attempt < SHIZUKU_STARTUP_RETRY_COUNT - 1) {
+                sleepNoThrow(SHIZUKU_STARTUP_RETRY_DELAY_MS * (attempt + 1));
+            }
+        }
+        return null;
+    }
+
+    private void sleepNoThrow(long delayMs) {
+        if (delayMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
