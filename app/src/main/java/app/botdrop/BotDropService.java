@@ -1,5 +1,6 @@
 package app.botdrop;
 
+import android.app.ActivityManager;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
@@ -378,8 +379,8 @@ public class BotDropService extends Service {
             pb.environment().put("SSL_CERT_FILE", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem");
             // Ensure Node.js can resolve globally installed native addons (for sharp, etc.)
             pb.environment().put("NODE_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules");
-            // Prefer IPv4 first; avoids long IPv6 connect stalls in Android/proot environments.
-            pb.environment().put("NODE_OPTIONS", "--dns-result-order=ipv4first");
+            pb.environment().put("NODE_OPTIONS",
+                resolveOpenclawNodeOptions(pb.environment().get("NODE_OPTIONS")));
 
             pb.redirectErrorStream(true);
 
@@ -516,6 +517,8 @@ public class BotDropService extends Service {
                 pb.environment().put("TMPDIR", TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
                 pb.environment().put("SSL_CERT_FILE", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/etc/tls/cert.pem");
                 pb.environment().put("NODE_PATH", TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules");
+                pb.environment().put("NODE_OPTIONS",
+                    resolveOpenclawNodeOptions(pb.environment().get("NODE_OPTIONS")));
                 pb.redirectErrorStream(true);
 
                 Logger.logInfo(LOG_TAG, "Starting install via " + INSTALL_SCRIPT);
@@ -658,15 +661,15 @@ public class BotDropService extends Service {
      * Does NOT use termux-chroot — for non-openclaw commands only.
      */
     private String withTermuxEnv(String command) {
-        return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
-               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
-               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + " && " +
-               "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + " && " +
-               "export PATH=$PREFIX/bin:$PATH && " +
-               "export TMPDIR=$PREFIX/tmp && " +
-               "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem && " +
-               "export NODE_PATH=$PREFIX/lib/node_modules && " +
-               "export NODE_OPTIONS=--dns-result-order=ipv4first && " +
+        return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
+               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
+               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + "\n" +
+               "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\n" +
+               "export PATH=$PREFIX/bin:$PATH\n" +
+               "export TMPDIR=$PREFIX/tmp\n" +
+               "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
+               "export NODE_PATH=$PREFIX/lib/node_modules\n" +
+               buildNodeOptionsExport() +
                command;
     }
 
@@ -676,15 +679,15 @@ public class BotDropService extends Service {
      * termux-chroot (proot) provides a virtual chroot that bypasses this limitation.
      */
     private String withTermuxChroot(String openclawArgs) {
-        return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
-               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + " && " +
-               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + " && " +
-               "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + " && " +
-               "export PATH=$PREFIX/bin:$PATH && " +
-               "export TMPDIR=$PREFIX/tmp && " +
-               "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem && " +
-               "export NODE_PATH=$PREFIX/lib/node_modules && " +
-               "export NODE_OPTIONS=--dns-result-order=ipv4first && " +
+        return "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
+               "export BOTDROP_TERMUX_HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
+               "export BOTDROP_SHARED_ROOT=" + BOTDROP_SHARED_ROOT + "\n" +
+               "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\n" +
+               "export PATH=$PREFIX/bin:$PATH\n" +
+               "export TMPDIR=$PREFIX/tmp\n" +
+               "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
+               "export NODE_PATH=$PREFIX/lib/node_modules\n" +
+               buildNodeOptionsExport() +
                // `openclaw` is installed as a wrapper that already runs under `termux-chroot`.
                // Avoid nesting proot/termux-chroot, which can stall gateway startup for minutes.
                "openclaw " + openclawArgs;
@@ -941,15 +944,13 @@ public class BotDropService extends Service {
                 // Step 2: npm install
                 Logger.logInfo(LOG_TAG, "Update: running npm install");
                 notifyUpdateStep(callback, "Installing update...");
-                String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
-                String npmCmd =
-                    "export PREFIX=" + prefix + "\n" +
-                    "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n" +
-                    "export PATH=$PREFIX/bin:$PATH\n" +
-                    "export TMPDIR=$PREFIX/tmp\n" +
-                    "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
-                    "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
-                    OpenclawVersionUtils.buildNpmInstallCommand(packageVersion) + " 2>&1\n";
+                int oldSpaceMb = OpenclawVersionUtils.recommendOpenclawOldSpaceMb(getDeviceTotalRamMb());
+                String npmCmd = "export PREFIX=" + TermuxConstants.TERMUX_PREFIX_DIR_PATH + "\n"
+                    + "export HOME=" + TermuxConstants.TERMUX_HOME_DIR_PATH + "\n"
+                    + "export PATH=$PREFIX/bin:$PATH\n"
+                    + "export TMPDIR=$PREFIX/tmp\n"
+                    + "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n"
+                    + OpenclawVersionUtils.buildNpmInstallCommand(packageVersion, oldSpaceMb) + " 2>&1\n";
                 CommandResult npmResult = executeCommandSync(npmCmd, 300);
                 if (!npmResult.success) {
                     String tail = extractTail(npmResult.stdout, 15);
@@ -964,6 +965,7 @@ public class BotDropService extends Service {
                 // doesn't work on Android/proot. We must recreate the custom wrapper.
                 Logger.logInfo(LOG_TAG, "Update: recreating openclaw wrapper");
                 notifyUpdateStep(callback, "Finalizing...");
+                String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
                 String binPrefix = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
                 String wrapperCmd =
                     "export PREFIX=" + prefix + "\n" +
@@ -985,7 +987,7 @@ public class BotDropService extends Service {
                     "  exit 127\n" +
                     "fi\n" +
                     "export SSL_CERT_FILE=\"$PREFIX/etc/tls/cert.pem\"\n" +
-                    "export NODE_OPTIONS=\"--dns-result-order=ipv4first\"\n" +
+                    buildNodeOptionsExport() +
                     "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n" +
                     "BOTDROP_OPENCLAW_WRAPPER\n" +
                     "chmod 755 $PREFIX/bin/openclaw\n" +
@@ -1321,7 +1323,7 @@ public class BotDropService extends Service {
             "export TMPDIR=$PREFIX/tmp\n" +
             "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n" +
             "export NODE_PATH=$PREFIX/lib/node_modules\n" +
-            "export NODE_OPTIONS=--dns-result-order=ipv4first\n" +
+            buildNodeOptionsExport() +
             "echo \"=== Environment before chroot ===\" >&2\n" +
             "echo \"SSL_CERT_FILE=$SSL_CERT_FILE\" >&2\n" +
             "echo \"NODE_PATH=$NODE_PATH\" >&2\n" +
@@ -1380,6 +1382,40 @@ public class BotDropService extends Service {
             sb.append(lines[i]).append("\n");
         }
         return sb.toString();
+    }
+
+    private String resolveOpenclawNodeOptions(String existingOptions) {
+        return OpenclawVersionUtils.buildOpenclawNodeOptions(existingOptions, getDeviceTotalRamMb());
+    }
+
+    /**
+     * Build NODE_OPTIONS shell export with heap size pre-computed from ActivityManager.
+     * Avoids relying on /proc/meminfo which may be unreliable inside proot/chroot.
+     */
+    private String buildNodeOptionsExport() {
+        int oldSpaceMb = OpenclawVersionUtils.recommendOpenclawOldSpaceMb(getDeviceTotalRamMb());
+        return OpenclawVersionUtils.buildNodeOptionsExportCommand(oldSpaceMb);
+    }
+
+    private long getDeviceTotalRamMb() {
+        try {
+            ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (activityManager == null) {
+                Logger.logWarn(LOG_TAG, "ActivityManager unavailable, using fallback heap size");
+                return 0L;
+            }
+
+            ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+            activityManager.getMemoryInfo(memoryInfo);
+            if (memoryInfo.totalMem <= 0) {
+                return 0L;
+            }
+
+            return memoryInfo.totalMem / (1024L * 1024L);
+        } catch (Throwable e) {
+            Logger.logWarn(LOG_TAG, "Failed to read device memory info: " + e.getMessage());
+            return 0L;
+        }
     }
 
 }

@@ -123,4 +123,64 @@ public class OpenclawVersionUtilsTest {
         assertTrue(OpenclawVersionUtils.compareDesc("latest", "1.0.0") < 0);
         assertTrue(OpenclawVersionUtils.compareDesc("1.0.0", "latest") > 0);
     }
+
+    @Test
+    public void testRecommendOpenclawOldSpaceMb_clampsAndScales() {
+        assertEquals(1536, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(0));
+        assertEquals(1536, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(4096));
+        assertEquals(2048, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(6144));
+        assertEquals(2048, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(8192));
+        assertEquals(2560, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(10240));
+        assertEquals(3072, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(12288));
+        assertEquals(4096, OpenclawVersionUtils.recommendOpenclawOldSpaceMb(32768));
+    }
+
+    @Test
+    public void testBuildOpenclawNodeOptions_addsDnsAndHeapLimit() {
+        String options = OpenclawVersionUtils.buildOpenclawNodeOptions("", 8192);
+
+        assertTrue(options.contains("--dns-result-order=ipv4first"));
+        assertTrue(options.contains("--max-old-space-size=2048"));
+    }
+
+    @Test
+    public void testBuildOpenclawNodeOptions_preservesExplicitHeapLimit() {
+        String options = OpenclawVersionUtils.buildOpenclawNodeOptions(
+            "--trace-warnings --max-old-space-size=6144",
+            8192
+        );
+
+        assertTrue(options.contains("--dns-result-order=ipv4first"));
+        assertTrue(options.contains("--trace-warnings"));
+        assertTrue(options.contains("--max-old-space-size=6144"));
+        assertFalse(options.contains("--max-old-space-size=2048"));
+    }
+
+    @Test
+    public void testBuildNodeOptionsExportCommand_containsHeapSetup() {
+        String script = OpenclawVersionUtils.buildNodeOptionsExportCommand();
+
+        assertTrue(script.contains("BOTDROP_OPENCLAW_MAX_OLD_SPACE_MB"));
+        assertTrue(script.contains("--dns-result-order=ipv4first"));
+        assertTrue(script.contains("--max-old-space-size="));
+    }
+
+    @Test
+    public void testBuildNodeOptionsExportCommand_withPrecomputedOldSpace() {
+        String script = OpenclawVersionUtils.buildNodeOptionsExportCommand(2048);
+
+        assertTrue(script.startsWith("export BOTDROP_OPENCLAW_DEFAULT_MAX_OLD_SPACE_MB=2048\n"));
+        assertTrue(script.contains(
+            "old_space_mb=\"${BOTDROP_OPENCLAW_MAX_OLD_SPACE_MB:-${BOTDROP_OPENCLAW_DEFAULT_MAX_OLD_SPACE_MB:-}}\""));
+        assertTrue(script.contains("--dns-result-order=ipv4first"));
+        assertTrue(script.contains("--max-old-space-size="));
+    }
+
+    @Test
+    public void testBuildNpmInstallCommand_withPrecomputedOldSpace() {
+        String command = OpenclawVersionUtils.buildNpmInstallCommand("openclaw@latest", 3072);
+
+        assertTrue(command.contains("export BOTDROP_OPENCLAW_DEFAULT_MAX_OLD_SPACE_MB=3072\n"));
+        assertTrue(command.contains("npm install -g 'openclaw@latest' --ignore-scripts --force"));
+    }
 }
