@@ -131,6 +131,12 @@
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
+            android:name="app.botdrop.BotDropSettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
             android:name="app.botdrop.AutomationPanelActivity"
             android:exported="false"
             android:screenOrientation="portrait"

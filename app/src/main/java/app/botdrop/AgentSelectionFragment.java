@@ -92,7 +92,6 @@ public class AgentSelectionFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         Button installButton = view.findViewById(R.id.agent_openclaw_install);
-        View versionManagerButton = view.findViewById(R.id.agent_openclaw_version_manager);
         final boolean isOpenclawInstalled = BotDropService.isOpenclawInstalled();
         installButton.setText(isOpenclawInstalled ? R.string.botdrop_open : R.string.botdrop_install);
         installButton.setOnClickListener(v -> {
@@ -108,11 +107,6 @@ public class AgentSelectionFragment extends Fragment {
                     activity.goToNextStep();
                 }
             }
-        });
-
-        versionManagerButton.setOnClickListener(v -> {
-            AnalyticsManager.logEvent(requireContext(), "agent_version_manager_tap");
-            showOpenclawVersionListDialog();
         });
 
         // URL click handlers
@@ -389,7 +383,7 @@ public class AgentSelectionFragment extends Fragment {
                     mProgressDialog.setStatus(message);
                     return;
                 }
-                mProgressDialog.setStep(nextStep);
+                mProgressDialog.setStep(nextStep, message);
                 mProgressDialog.setStatus(message);
             }
 

@@ -94,28 +94,6 @@
                 android:textStyle="bold" />
 
         </LinearLayout>
-
-        <!-- Versions button: top-right corner -->
-        <TextView
-            android:id="@+id/agent_openclaw_version_manager"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/botdrop_versions"
-            android:textSize="9sp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:gravity="center"
-            android:background="@drawable/botdrop_button_red_outline_bg"
-            android:textColor="@color/botdrop_accent"
-            android:contentDescription="@string/botdrop_openclaw_version_manager"
-            android:layout_gravity="end|top"
-            android:layout_marginTop="6dp"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true" />
-
     </FrameLayout>
 
     <!-- Divider -->

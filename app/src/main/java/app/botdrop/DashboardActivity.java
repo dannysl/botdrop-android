@@ -24,10 +24,12 @@ import android.view.LayoutInflater;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -155,9 +157,15 @@ public class DashboardActivity extends Activity {
     private View mDiscordChannelRow;
     private View mFeishuChannelRow;
     private View mQQBotChannelRow;
-    private Button mStartButton;
-    private Button mStopButton;
-    private Button mRestartButton;
+    private View mStartButton;
+    private View mStopButton;
+    private View mRestartButton;
+    private ImageView mStartButtonIcon;
+    private ImageView mStopButtonIcon;
+    private ImageView mRestartButtonIcon;
+    private TextView mStartButtonLabel;
+    private TextView mStopButtonLabel;
+    private TextView mRestartButtonLabel;
     private View mSshCard;
     private TextView mSshInfoText;
     private View mUpdateBanner;
@@ -254,7 +262,14 @@ public class DashboardActivity extends Activity {
         mStartButton = findViewById(R.id.btn_start);
         mStopButton = findViewById(R.id.btn_stop);
         mRestartButton = findViewById(R.id.btn_restart);
+        mStartButtonIcon = findViewById(R.id.btn_start_icon);
+        mStopButtonIcon = findViewById(R.id.btn_stop_icon);
+        mRestartButtonIcon = findViewById(R.id.btn_restart_icon);
+        mStartButtonLabel = findViewById(R.id.btn_start_label);
+        mStopButtonLabel = findViewById(R.id.btn_stop_label);
+        mRestartButtonLabel = findViewById(R.id.btn_restart_label);
         Button openTerminalButton = findViewById(R.id.btn_open_terminal);
+        ImageButton openSettingsButton = findViewById(R.id.btn_open_botdrop_settings);
         mCurrentModelText = findViewById(R.id.current_model_text);
         Button changeModelButton = findViewById(R.id.btn_change_model);
         mGatewayErrorBanner = findViewById(R.id.gateway_error_banner);
@@ -274,6 +289,9 @@ public class DashboardActivity extends Activity {
             AnalyticsManager.logEvent(this, "dashboard_restart_tap");
             restartGatewayForControl();
         });
+        setAsAccessibleButton(mStartButton);
+        setAsAccessibleButton(mStopButton);
+        setAsAccessibleButton(mRestartButton);
         openTerminalButton.setOnClickListener(v -> {
             AnalyticsManager.logEvent(this, "dashboard_terminal_tap");
             openTerminal();
@@ -286,6 +304,12 @@ public class DashboardActivity extends Activity {
             mOpenAutomationPanelButton.setOnClickListener(v -> {
                 AnalyticsManager.logEvent(this, "dashboard_automation_tap");
                 openAutomationPanel();
+            });
+        }
+        if (openSettingsButton != null) {
+            openSettingsButton.setOnClickListener(v -> {
+                AnalyticsManager.logEvent(this, "dashboard_settings_tap");
+                openBotdropSettings();
             });
         }
 
@@ -425,6 +449,11 @@ public class DashboardActivity extends Activity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+
+    private void openBotdropSettings() {
+        Intent intent = new Intent(this, BotDropSettingsActivity.class);
+        startActivity(intent);
     }
 
     @Override
@@ -1363,15 +1392,46 @@ public class DashboardActivity extends Activity {
         }
     }
 
-    private void setButtonState(Button button, boolean enabled, boolean isFilled) {
+    private void setButtonState(View button, boolean enabled, boolean isFilled) {
         button.setEnabled(enabled);
+        ImageView iconView = null;
+        TextView labelView = null;
+        int enabledColor = isFilled
+            ? ContextCompat.getColor(this, R.color.botdrop_background)
+            : ContextCompat.getColor(this, R.color.botdrop_accent);
+        if (button == mStartButton) {
+            iconView = mStartButtonIcon;
+            labelView = mStartButtonLabel;
+        } else if (button == mStopButton) {
+            iconView = mStopButtonIcon;
+            labelView = mStopButtonLabel;
+        } else if (button == mRestartButton) {
+            iconView = mRestartButtonIcon;
+            labelView = mRestartButtonLabel;
+        }
         if (enabled) {
             button.setAlpha(1.0f);
-            button.setTextColor(isFilled ? ContextCompat.getColor(this, R.color.botdrop_background) : ContextCompat.getColor(this, R.color.botdrop_accent));
+            if (labelView != null) labelView.setTextColor(enabledColor);
+            if (iconView != null) iconView.setColorFilter(enabledColor);
         } else {
             button.setAlpha(0.5f);
-            button.setTextColor(ContextCompat.getColor(this, R.color.botdrop_secondary_text));
+            int color = ContextCompat.getColor(this, R.color.botdrop_secondary_text);
+            if (labelView != null) labelView.setTextColor(color);
+            if (iconView != null) iconView.setColorFilter(color);
         }
+    }
+
+    private void setAsAccessibleButton(View view) {
+        if (view == null) {
+            return;
+        }
+        view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(Button.class.getName());
+            }
+        });
     }
 
     private void openChannelConfig(String platform) {
@@ -2514,7 +2574,7 @@ public class DashboardActivity extends Activity {
         logViewPager.setAdapter(pagerAdapter);
         logViewPager.setOffscreenPageLimit(1);
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = BotDropDialogStyler.createBuilder(this)
             .setView(logDialogView)
             .create();
 
@@ -2601,6 +2661,7 @@ public class DashboardActivity extends Activity {
         });
 
         dialog.show();
+        BotDropDialogStyler.applyTransparentCardWindow(dialog);
     }
 
     private static class OpenclawLogPageViewHolder extends RecyclerView.ViewHolder {
@@ -3005,6 +3066,13 @@ public class DashboardActivity extends Activity {
             dialogView.findViewById(R.id.update_step_3_icon),
             dialogView.findViewById(R.id.update_step_4_icon),
         };
+        TextView[] stepPercents = {
+            dialogView.findViewById(R.id.update_step_0_percent),
+            dialogView.findViewById(R.id.update_step_1_percent),
+            dialogView.findViewById(R.id.update_step_2_percent),
+            dialogView.findViewById(R.id.update_step_3_percent),
+            dialogView.findViewById(R.id.update_step_4_percent),
+        };
         TextView statusMessage = dialogView.findViewById(R.id.update_status_message);
 
         AlertDialog progressDialog = BotDropDialogStyler.createBuilder(this)
@@ -3034,19 +3102,31 @@ public class DashboardActivity extends Activity {
                 if (nextStep < 0) return;
 
                 // Mark all previous steps as complete
-                for (int i = 0; i <= currentStep && i < stepIcons.length; i++) {
+                for (int i = 0; i < nextStep && i < stepIcons.length; i++) {
                     stepIcons[i].setText("\u2713");
+                    stepPercents[i].setText(StepPercentUtils.formatPercent(100));
                 }
                 // Mark current step as in-progress
                 if (nextStep < stepIcons.length) {
                     stepIcons[nextStep].setText("\u25CF");
+                    if (nextStep > currentStep) {
+                        stepPercents[nextStep].setText(StepPercentUtils.formatPercent(0));
+                    }
                 }
                 currentStep = nextStep;
             }
 
             @Override
             public void onStepStart(String message) {
+                int nextStep = OpenclawUpdateProgress.resolveStepFromMessage(message);
                 advanceTo(message);
+                if (nextStep >= 0 && nextStep < stepPercents.length) {
+                    stepPercents[nextStep].setText(
+                        StepPercentUtils.formatPercent(
+                            StepPercentUtils.extractPercent(message, 0)
+                        )
+                    );
+                }
             }
 
             @Override
@@ -3073,8 +3153,9 @@ public class DashboardActivity extends Activity {
                 prefetchModelsForUpdate(newVersion, success -> {
                     AnalyticsManager.logEvent(DashboardActivity.this, "openclaw_update_completed");
                     // Mark all steps complete
-                    for (TextView icon : stepIcons) {
-                        icon.setText("\u2713");
+                    for (int i = 0; i < stepIcons.length; i++) {
+                        stepIcons[i].setText("\u2713");
+                        stepPercents[i].setText(StepPercentUtils.formatPercent(100));
                     }
                     statusMessage.setText(
                         success

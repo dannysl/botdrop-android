@@ -31,6 +31,15 @@
             android:text="@string/botdrop_stopping_gateway"
             android:textSize="14sp"
             android:textColor="@color/botdrop_on_background" />
+
+        <TextView
+            android:id="@+id/update_step_0_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0%"
+            android:textColor="@color/botdrop_secondary_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Step 1: Install update -->
@@ -58,6 +67,15 @@
             android:text="@string/botdrop_installing_update"
             android:textSize="14sp"
             android:textColor="@color/botdrop_on_background" />
+
+        <TextView
+            android:id="@+id/update_step_1_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0%"
+            android:textColor="@color/botdrop_secondary_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Step 2: Finalize -->
@@ -85,6 +103,15 @@
             android:text="@string/botdrop_finalizing"
             android:textSize="14sp"
             android:textColor="@color/botdrop_on_background" />
+
+        <TextView
+            android:id="@+id/update_step_2_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0%"
+            android:textColor="@color/botdrop_secondary_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Step 3: Start gateway -->
@@ -112,6 +139,15 @@
             android:text="@string/botdrop_starting_gateway"
             android:textSize="14sp"
             android:textColor="@color/botdrop_on_background" />
+
+        <TextView
+            android:id="@+id/update_step_3_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0%"
+            android:textColor="@color/botdrop_secondary_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Step 4: Refresh model list cache -->
@@ -139,6 +175,15 @@
             android:text="@string/botdrop_refreshing_model_list"
             android:textSize="14sp"
             android:textColor="@color/botdrop_on_background" />
+
+        <TextView
+            android:id="@+id/update_step_4_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0%"
+            android:textColor="@color/botdrop_secondary_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Status message -->
