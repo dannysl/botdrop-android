@@ -25,6 +25,7 @@ import java.net.URL;
 public class UpdateChecker {
 
     private static final String LOG_TAG = "UpdateChecker";
+    private static final String DISABLED_MESSAGE = "App updates are disabled";
     private static final String CHECK_URL = "https://api.botdrop.app/version";
     private static final long CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L; // 6 hours
     private static final int CONNECT_TIMEOUT_MS = 10000;
@@ -48,11 +49,21 @@ public class UpdateChecker {
         void onComplete(boolean updateAvailable, String latestVersion, String downloadUrl, String notes, String message);
     }
 
+    static boolean isUpdateManagementDisabled(Context ctx) {
+        return BundledOpenclawUtils.shouldDisableUpdateManagement(ctx);
+    }
+
     /**
      * Run a background check and persist results. Optionally calls back on the main thread.
      */
     static void check(Context ctx, UpdateCallback cb) {
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        if (isUpdateManagementDisabled(ctx)) {
+            Logger.logInfo(LOG_TAG, "Skipping app update check because update management is disabled");
+            clearStored(prefs);
+            notifyNoUpdate(cb);
+            return;
+        }
         String currentVersion;
         int currentVersionCode;
         try {
@@ -179,6 +190,12 @@ public class UpdateChecker {
      */
     public static void forceCheckWithFeedback(Context ctx, ForceCheckCallback cb) {
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        if (isUpdateManagementDisabled(ctx)) {
+            Logger.logInfo(LOG_TAG, "Skipping forced app update check because update management is disabled");
+            clearStored(prefs);
+            notifyForceResult(cb, false, null, null, null, DISABLED_MESSAGE);
+            return;
+        }
         prefs.edit().putLong(KEY_LAST_CHECK, 0).apply();
 
         String currentVersion;
@@ -261,6 +278,11 @@ public class UpdateChecker {
      * Returns [latestVersion, downloadUrl, releaseNotes] or null.
      */
     static String[] getAvailableUpdate(Context ctx) {
+        if (isUpdateManagementDisabled(ctx)) {
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            clearStored(prefs);
+            return null;
+        }
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String latestVersion = prefs.getString(KEY_LATEST_VERSION, null);
         if (latestVersion == null) return null;

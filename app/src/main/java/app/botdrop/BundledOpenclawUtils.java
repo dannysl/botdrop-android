@@ -102,8 +102,16 @@ public final class BundledOpenclawUtils {
         return manifest.installSpec.equals(resolved);
     }
 
-    public static boolean shouldDisableVersionManagement(@Nullable Manifest manifest) {
+    public static boolean shouldDisableUpdateManagement(@Nullable Manifest manifest) {
         return manifest != null;
+    }
+
+    public static boolean shouldDisableUpdateManagement(@NonNull Context context) {
+        return shouldDisableUpdateManagement(loadManifest(context));
+    }
+
+    public static boolean shouldDisableVersionManagement(@Nullable Manifest manifest) {
+        return shouldDisableUpdateManagement(manifest);
     }
 
     @NonNull

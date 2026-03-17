@@ -63,6 +63,7 @@ public class BotDropLauncherActivity extends Activity {
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private boolean mPermissionsPhaseComplete = false;
     private boolean mContinueClickedPersisted = false;
+    private boolean mUpdateManagementDisabled;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -80,6 +81,7 @@ public class BotDropLauncherActivity extends Activity {
         mNotificationStatus = findViewById(R.id.notification_status);
         mBatteryStatus = findViewById(R.id.battery_status);
         mBackgroundHintText = findViewById(R.id.background_hint_text);
+        mUpdateManagementDisabled = BundledOpenclawUtils.shouldDisableUpdateManagement(this);
 
         mContinueClickedPersisted = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_ONBOARDING_CONTINUE, false);
@@ -88,7 +90,9 @@ public class BotDropLauncherActivity extends Activity {
         BotDropConfig.sanitizeLegacyConfig();
 
         // Trigger update check early (results stored for Dashboard to display)
-        UpdateChecker.check(this, null);
+        if (!mUpdateManagementDisabled) {
+            UpdateChecker.check(this, null);
+        }
 
         mNotificationButton.setOnClickListener(v -> {
             AnalyticsManager.logEvent(this, "launcher_notification_tap");
@@ -102,10 +106,14 @@ public class BotDropLauncherActivity extends Activity {
             AnalyticsManager.logEvent(this, "launcher_background_tap");
             openAdvancedBackgroundSettings();
         });
-        mCheckUpdateButton.setOnClickListener(v -> {
-            AnalyticsManager.logEvent(this, "launcher_update_check_tap");
-            checkUpdateManually();
-        });
+        if (mCheckUpdateButton != null && mUpdateManagementDisabled) {
+            mCheckUpdateButton.setVisibility(View.GONE);
+        } else if (mCheckUpdateButton != null) {
+            mCheckUpdateButton.setOnClickListener(v -> {
+                AnalyticsManager.logEvent(this, "launcher_update_check_tap");
+                checkUpdateManually();
+            });
+        }
         mContinueButton.setOnClickListener(v -> {
             AnalyticsManager.logEvent(this, "launcher_continue_tap");
             mPermissionsPhaseComplete = true;
@@ -333,6 +341,9 @@ public class BotDropLauncherActivity extends Activity {
     }
 
     private void checkUpdateManually() {
+        if (mUpdateManagementDisabled || mCheckUpdateButton == null) {
+            return;
+        }
         mCheckUpdateButton.setEnabled(false);
         mCheckUpdateButton.setText(R.string.botdrop_checking_updates);
 

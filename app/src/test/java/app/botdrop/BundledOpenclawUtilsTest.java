@@ -80,6 +80,23 @@ public class BundledOpenclawUtilsTest {
     }
 
     @Test
+    public void testShouldDisableUpdateManagement_whenBundleManifestPresent() {
+        BundledOpenclawUtils.Manifest manifest = new BundledOpenclawUtils.Manifest(
+            "2026.3.13",
+            "openclaw@2026.3.13",
+            "openclaw-runtime.tar",
+            "qqbot"
+        );
+
+        assertTrue(BundledOpenclawUtils.shouldDisableUpdateManagement(manifest));
+    }
+
+    @Test
+    public void testShouldDisableUpdateManagement_withoutBundleManifest() {
+        assertFalse(BundledOpenclawUtils.shouldDisableUpdateManagement((BundledOpenclawUtils.Manifest) null));
+    }
+
+    @Test
     public void testParseManifest_missingVersionReturnsNull() {
         String manifest =
             "installSpec=openclaw@2026.3.13\n" +

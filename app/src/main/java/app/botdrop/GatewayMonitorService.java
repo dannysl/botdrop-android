@@ -251,6 +251,9 @@ public class GatewayMonitorService extends Service {
     }
 
     private void maybeCheckForAppUpdate() {
+        if (UpdateChecker.isUpdateManagementDisabled(this)) {
+            return;
+        }
         SharedPreferences prefs = getSharedPreferences(APP_UPDATE_PREFS_NAME, MODE_PRIVATE);
         long lastCheck = prefs.getLong(KEY_BG_LAST_APP_UPDATE_CHECK, 0);
         long now = System.currentTimeMillis();

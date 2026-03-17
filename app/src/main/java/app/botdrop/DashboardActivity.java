@@ -181,6 +181,7 @@ public class DashboardActivity extends Activity {
     private boolean mUiVisible = true;
     private boolean mOpenclawWebUiOpening;
     private boolean mOpenclawVersionActionInProgress;
+    private boolean mUpdateManagementDisabled;
     private boolean mOpenclawVersionManagementDisabled;
 
     private BotDropService mBotDropService;
@@ -241,9 +242,9 @@ public class DashboardActivity extends Activity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_botdrop_dashboard);
-        mOpenclawVersionManagementDisabled = BundledOpenclawUtils.shouldDisableVersionManagement(
-            BundledOpenclawUtils.loadManifest(this)
-        );
+        BundledOpenclawUtils.Manifest bundledManifest = BundledOpenclawUtils.loadManifest(this);
+        mUpdateManagementDisabled = BundledOpenclawUtils.shouldDisableUpdateManagement(bundledManifest);
+        mOpenclawVersionManagementDisabled = mUpdateManagementDisabled;
 
         // Create notification channel
         createNotificationChannel();
@@ -304,6 +305,9 @@ public class DashboardActivity extends Activity {
         // Update banner
         mUpdateBanner = findViewById(R.id.update_banner);
         mUpdateBannerText = findViewById(R.id.update_banner_text);
+        if (mUpdateManagementDisabled && mUpdateBanner != null) {
+            mUpdateBanner.setVisibility(View.GONE);
+        }
 
         // OpenClaw version + check button
         mOpenclawVersionText = findViewById(R.id.openclaw_version_text);
@@ -395,24 +399,27 @@ public class DashboardActivity extends Activity {
         bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
         // Check for app updates (also picks up results from launcher check)
-        UpdateChecker.check(this, new UpdateChecker.UpdateCallback() {
-            @Override
-            public void onUpdateAvailable(String latestVersion, String downloadUrl, String notes) {
-                AnalyticsManager.logEvent(DashboardActivity.this, "app_update_available");
-                showUpdateBanner(latestVersion, downloadUrl);
-            }
+        if (!mUpdateManagementDisabled) {
+            UpdateChecker.check(this, new UpdateChecker.UpdateCallback() {
+                @Override
+                public void onUpdateAvailable(String latestVersion, String downloadUrl, String notes) {
+                    AnalyticsManager.logEvent(DashboardActivity.this, "app_update_available");
+                    showUpdateBanner(latestVersion, downloadUrl);
+                }
 
-            @Override
-            public void onNoUpdate() {
-                AnalyticsManager.logEvent(DashboardActivity.this, "app_update_none");
-                hideUpdateBanner();
-            }
-        });
+                @Override
+                public void onNoUpdate() {
+                    AnalyticsManager.logEvent(DashboardActivity.this, "app_update_none");
+                    hideUpdateBanner();
+                }
+            });
 
-        // Also check stored result in case launcher already fetched it
-        String[] stored = UpdateChecker.getAvailableUpdate(this);
-        if (stored != null) {
-            showUpdateBanner(stored[0], stored[1]);
+            String[] stored = UpdateChecker.getAvailableUpdate(this);
+            if (stored != null) {
+                showUpdateBanner(stored[0], stored[1]);
+            }
+        } else {
+            hideUpdateBanner();
         }
         registerBackInvokedCallback();
 

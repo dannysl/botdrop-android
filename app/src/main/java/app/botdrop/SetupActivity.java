@@ -99,6 +99,7 @@ public class SetupActivity extends AppCompatActivity {
     private Button mNextButton;
     private Runnable mPendingOpenclawStorageAction;
     private Runnable mPendingOpenclawStorageDeniedAction;
+    private boolean mUpdateManagementDisabled;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,6 +110,7 @@ public class SetupActivity extends AppCompatActivity {
         mNavigationBar = findViewById(R.id.setup_navigation);
         mBackButton = findViewById(R.id.setup_button_back);
         mNextButton = findViewById(R.id.setup_button_next);
+        mUpdateManagementDisabled = BundledOpenclawUtils.shouldDisableUpdateManagement(this);
         
         // Setup Open Terminal button if it exists in layout
         Button openTerminalBtn = findViewById(R.id.setup_open_terminal);
@@ -162,26 +164,30 @@ public class SetupActivity extends AppCompatActivity {
 
         // Setup manual update check button
         Button checkUpdatesBtn = findViewById(R.id.setup_check_updates);
-        checkUpdatesBtn.setOnClickListener(v -> {
-            AnalyticsManager.logEvent(this, "setup_update_check_tap", "step", getAnalyticsStepName(mViewPager.getCurrentItem()));
-            v.setEnabled(false);
-            UpdateChecker.forceCheck(this, (version, url, notes) -> {
-                v.setEnabled(true);
-                if (version != null && !version.isEmpty()) {
-                    new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.botdrop_update_update_available))
-                .setMessage(getString(R.string.botdrop_update_update_message, version))
-                .setPositiveButton(getString(R.string.botdrop_open_browser), (d, w) -> {
-                    AnalyticsManager.logEvent(this, "setup_update_open_browser");
-                    openBotdropUpdatePage();
-                })
-                .setNegativeButton(getString(R.string.botdrop_cancel), null)
-                .show();
-                } else {
-                    Toast.makeText(this, getString(R.string.botdrop_no_update_available), Toast.LENGTH_SHORT).show();
-                }
+        if (checkUpdatesBtn != null && mUpdateManagementDisabled) {
+            checkUpdatesBtn.setVisibility(View.GONE);
+        } else if (checkUpdatesBtn != null) {
+            checkUpdatesBtn.setOnClickListener(v -> {
+                AnalyticsManager.logEvent(this, "setup_update_check_tap", "step", getAnalyticsStepName(mViewPager.getCurrentItem()));
+                v.setEnabled(false);
+                UpdateChecker.forceCheck(this, (version, url, notes) -> {
+                    v.setEnabled(true);
+                    if (version != null && !version.isEmpty()) {
+                        new AlertDialog.Builder(this)
+                            .setTitle(getString(R.string.botdrop_update_update_available))
+                            .setMessage(getString(R.string.botdrop_update_update_message, version))
+                            .setPositiveButton(getString(R.string.botdrop_open_browser), (d, w) -> {
+                                AnalyticsManager.logEvent(this, "setup_update_open_browser");
+                                openBotdropUpdatePage();
+                            })
+                            .setNegativeButton(getString(R.string.botdrop_cancel), null)
+                            .show();
+                    } else {
+                        Toast.makeText(this, getString(R.string.botdrop_no_update_available), Toast.LENGTH_SHORT).show();
+                    }
+                });
             });
-        });
+        }
 
         Logger.logDebug(LOG_TAG, "SetupActivity created, starting at step " + startStep);
 
