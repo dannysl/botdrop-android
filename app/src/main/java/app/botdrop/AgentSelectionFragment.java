@@ -60,6 +60,7 @@ public class AgentSelectionFragment extends Fragment {
     private StepProgressDialog mProgressDialog;
     private boolean mOpenclawVersionActionInProgress;
     private long mOpenclawVersionRequestId;
+    private boolean mOpenclawVersionManagementDisabled;
     private int mTapCount = 0;
     private long mFirstTapTime = 0;
 
@@ -93,6 +94,9 @@ public class AgentSelectionFragment extends Fragment {
 
         Button installButton = view.findViewById(R.id.agent_openclaw_install);
         View versionManagerButton = view.findViewById(R.id.agent_openclaw_version_manager);
+        mOpenclawVersionManagementDisabled = BundledOpenclawUtils.shouldDisableVersionManagement(
+            BundledOpenclawUtils.loadManifest(requireContext())
+        );
         final boolean isOpenclawInstalled = BotDropService.isOpenclawInstalled();
         installButton.setText(isOpenclawInstalled ? R.string.botdrop_open : R.string.botdrop_install);
         installButton.setOnClickListener(v -> {
@@ -110,10 +114,14 @@ public class AgentSelectionFragment extends Fragment {
             }
         });
 
-        versionManagerButton.setOnClickListener(v -> {
-            AnalyticsManager.logEvent(requireContext(), "agent_version_manager_tap");
-            showOpenclawVersionListDialog();
-        });
+        if (mOpenclawVersionManagementDisabled) {
+            versionManagerButton.setVisibility(View.GONE);
+        } else {
+            versionManagerButton.setOnClickListener(v -> {
+                AnalyticsManager.logEvent(requireContext(), "agent_version_manager_tap");
+                showOpenclawVersionListDialog();
+            });
+        }
 
         // URL click handlers
         view.findViewById(R.id.agent_openclaw_url).setOnClickListener(v -> {
@@ -123,6 +131,9 @@ public class AgentSelectionFragment extends Fragment {
 
         // Easter egg: tap OpenClaw icon 10 times to pin install version
         view.findViewById(R.id.agent_openclaw_icon).setOnClickListener(v -> {
+            if (mOpenclawVersionManagementDisabled) {
+                return;
+            }
             long now = System.currentTimeMillis();
             if (mTapCount == 0 || now - mFirstTapTime > TAP_WINDOW_MS) {
                 mTapCount = 1;
@@ -171,6 +182,9 @@ public class AgentSelectionFragment extends Fragment {
     }
 
     private void showOpenclawVersionListDialog() {
+        if (mOpenclawVersionManagementDisabled) {
+            return;
+        }
         Context ctx = getContext();
         if (ctx == null) {
             return;
@@ -596,6 +610,9 @@ public class AgentSelectionFragment extends Fragment {
     }
 
     private void showVersionPinDialog() {
+        if (mOpenclawVersionManagementDisabled) {
+            return;
+        }
         Context ctx = getContext();
         if (ctx == null) return;
 

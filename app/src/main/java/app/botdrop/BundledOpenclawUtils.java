@@ -104,6 +104,10 @@ public final class BundledOpenclawUtils {
         return manifest.installSpec.equals(resolved);
     }
 
+    public static boolean shouldDisableVersionManagement(@Nullable Manifest manifest) {
+        return manifest != null;
+    }
+
     @NonNull
     public static String buildOfflineQqbotInstallCommand() {
         return "bash '" + OFFLINE_QQBOT_INSTALL_SCRIPT_PATH + "'";

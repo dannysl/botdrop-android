@@ -180,6 +180,7 @@ public class DashboardActivity extends Activity {
     private boolean mUiVisible = true;
     private boolean mOpenclawWebUiOpening;
     private boolean mOpenclawVersionActionInProgress;
+    private boolean mOpenclawVersionManagementDisabled;
 
     private BotDropService mBotDropService;
     private boolean mBound = false;
@@ -219,7 +220,11 @@ public class DashboardActivity extends Activity {
             loadCurrentModel();
 
             // Check for OpenClaw updates
-            checkOpenclawUpdate();
+            if (!mOpenclawVersionManagementDisabled) {
+                checkOpenclawUpdate();
+            } else {
+                dismissOpenclawUpdateDialog();
+            }
 
         }
 
@@ -235,6 +240,9 @@ public class DashboardActivity extends Activity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_botdrop_dashboard);
+        mOpenclawVersionManagementDisabled = BundledOpenclawUtils.shouldDisableVersionManagement(
+            BundledOpenclawUtils.loadManifest(this)
+        );
 
         // Create notification channel
         createNotificationChannel();
@@ -299,7 +307,9 @@ public class DashboardActivity extends Activity {
         // OpenClaw version + check button
         mOpenclawVersionText = findViewById(R.id.openclaw_version_text);
         mOpenclawCheckUpdateButton = findViewById(R.id.btn_check_openclaw_update);
-        if (mOpenclawCheckUpdateButton != null) {
+        if (mOpenclawCheckUpdateButton != null && mOpenclawVersionManagementDisabled) {
+            mOpenclawCheckUpdateButton.setVisibility(View.GONE);
+        } else if (mOpenclawCheckUpdateButton != null) {
             mOpenclawCheckUpdateButton.setOnClickListener(v -> {
                 AnalyticsManager.logEvent(this, "openclaw_update_check_tap");
                 forceCheckOpenclawUpdate();
@@ -2823,7 +2833,15 @@ public class DashboardActivity extends Activity {
     }
 
     private void checkOpenclawUpdate() {
-        if (!mBound || mBotDropService == null) return;
+        String currentVersion = BotDropService.getOpenclawVersion();
+        if (currentVersion != null && mOpenclawVersionText != null) {
+            mOpenclawVersionText.setText(getString(R.string.botdrop_openclaw_version, currentVersion));
+        }
+
+        if (mOpenclawVersionManagementDisabled || !mBound || mBotDropService == null) {
+            dismissOpenclawUpdateDialog();
+            return;
+        }
 
         // One-time migration: clear stale throttle from previous code that recorded
         // check time even when npm returned invalid output, blocking retries for 24h.
@@ -2834,12 +2852,6 @@ public class DashboardActivity extends Activity {
                 .remove("last_check_time")
                 .putBoolean("throttle_fix_v1", true)
                 .apply();
-        }
-
-        // Display current version
-        String currentVersion = BotDropService.getOpenclawVersion();
-        if (currentVersion != null && mOpenclawVersionText != null) {
-            mOpenclawVersionText.setText(getString(R.string.botdrop_openclaw_version, currentVersion));
         }
 
         // Also check stored result immediately (in case a previous check found an update)
@@ -2865,6 +2877,11 @@ public class DashboardActivity extends Activity {
     }
 
     private void forceCheckOpenclawUpdate() {
+        if (mOpenclawVersionManagementDisabled) {
+            dismissOpenclawUpdateDialog();
+            return;
+        }
+
         if (!mBound || mBotDropService == null) {
             AnalyticsManager.logEvent(this, "openclaw_update_check_blocked");
             Toast.makeText(this, getString(R.string.botdrop_service_not_connected), Toast.LENGTH_SHORT).show();
