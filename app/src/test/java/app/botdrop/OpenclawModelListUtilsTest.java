@@ -34,4 +34,17 @@ public class OpenclawModelListUtilsTest {
 
         assertTrue(command.contains("BOTDROP_TRACE_NPM_REGISTRY=1 " + OpenclawVersionUtils.MODEL_LIST_COMMAND));
     }
+
+    @Test
+    public void buildPreferredModelListCommand_usesBuiltInRegistryWhenModelsJsonIsMissing() {
+        String command = OpenclawModelListUtils.buildPreferredModelListCommand(true);
+
+        assertTrue(command.contains("if [ -f \"$models_json\" ]; then"));
+        assertTrue(command.contains("  export BOTDROP_MODELS_JSON=\"$models_json\""));
+        assertTrue(command.contains("  unset BOTDROP_MODELS_JSON"));
+        assertTrue(command.contains(
+            "const registry = process.env.BOTDROP_MODELS_JSON\n"
+                + "  ? new ModelRegistry(fakeAuth, process.env.BOTDROP_MODELS_JSON)\n"
+                + "  : new ModelRegistry(fakeAuth);"));
+    }
 }
