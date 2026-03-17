@@ -11,8 +11,6 @@ public final class OpenclawModelListUtils {
 
     public static final String FALLBACK_MODEL_LIST_COMMAND = OpenclawVersionUtils.MODEL_LIST_COMMAND;
 
-    private static final String MODEL_REGISTRY_MODULE_PATH =
-        "$PREFIX/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js";
     private static final String MODELS_JSON_PATH = "$HOME/.openclaw/agents/main/models.json";
 
     private OpenclawModelListUtils() {}
@@ -25,13 +23,22 @@ public final class OpenclawModelListUtils {
         String fallbackCommand = OpenclawVersionUtils.buildModelListCommand(enableTrace);
         return String.join("\n",
             "export LD_LIBRARY_PATH=\"$PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"",
-            "model_registry_js=\"" + MODEL_REGISTRY_MODULE_PATH + "\"",
+            "model_registry_js=\"\"",
             "models_json=\"" + MODELS_JSON_PATH + "\"",
             "probe_script=\"$TMPDIR/botdrop-model-list-$$.mjs\"",
             "cleanup() {",
             "  rm -f \"$probe_script\"",
             "}",
             "trap cleanup EXIT",
+            "for candidate in \\",
+            "  \"$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js\" \\",
+            "  \"$PREFIX/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js\" \\",
+            "  \"$PREFIX/share/botdrop/openclaw-runtime/current/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js\"; do",
+            "  if [ -f \"$candidate\" ]; then",
+            "    model_registry_js=\"$candidate\"",
+            "    break",
+            "  fi",
+            "done",
             "if [ -x \"$PREFIX/bin/node\" ] && [ -x \"$PREFIX/bin/termux-chroot\" ] && [ -f \"$model_registry_js\" ]; then",
             "  cat > \"$probe_script\" <<'EOF'",
             "const { ModelRegistry } = await import(`file://${process.env.BOTDROP_MODEL_REGISTRY_JS}`);",

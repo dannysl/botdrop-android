@@ -12,8 +12,14 @@ public class OpenclawModelListUtilsTest {
     public void buildPreferredModelListCommand_prefersModelRegistryAndFallsBackToOpenclawCli() {
         String command = OpenclawModelListUtils.buildPreferredModelListCommand();
 
-        assertTrue(command.contains("$PREFIX/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
-        assertFalse(command.contains("$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent"));
+        assertTrue(command.contains("model_registry_js=\"\""));
+        assertTrue(command.contains("for candidate in \\"));
+        assertTrue(command.contains(
+            "$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
+        assertTrue(command.contains(
+            "$PREFIX/share/botdrop/openclaw-runtime/current/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
+        assertTrue(command.contains("if [ -f \"$candidate\" ]; then"));
+        assertTrue(command.contains("model_registry_js=\"$candidate\""));
         assertTrue(command.contains("setFallbackResolver() {}"));
         assertTrue(command.contains("registry.getAll()"));
         assertTrue(command.contains("model.provider + '/' + model.id"));
