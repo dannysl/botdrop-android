@@ -24,6 +24,7 @@ import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
+import app.botdrop.BundledOpenclawUtils;
 import app.botdrop.OpenclawVersionUtils;
 
 import java.io.BufferedReader;
@@ -484,64 +485,20 @@ public final class TermuxInstaller {
                 "fi\n" +
                 "echo \"BOTDROP_INFO:Node $NODE_V, npm $NPM_V\"\n" +
                 "echo \"BOTDROP_STEP:1:DONE\"\n\n" +
-                "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
-                "rm -rf $PREFIX/lib/node_modules/openclaw 2>/dev/null\n" +
-                "\n" +
-                "NPM_OUTPUT=$(" + OpenclawVersionUtils.buildNpmInstallCommand(openclawVersion, oldSpaceMb) + " 2>&1)\n" +
-                "NPM_EXIT=$?\n" +
-                "if [ $NPM_EXIT -eq 0 ]; then\n" +
-                "    # Create a stable openclaw wrapper (npm-generated shim can be broken on Android/proot)\n" +
-                "    cat > $PREFIX/bin/openclaw <<'BOTDROP_OPENCLAW_WRAPPER'\n" +
-                "#!" + com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash\n" +
-                "PREFIX=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +
-                "ENTRY=\"\"\n" +
-                "for CANDIDATE in \\\n" +
-                "  \"$PREFIX/lib/node_modules/openclaw/dist/cli.js\" \\\n" +
-                "  \"$PREFIX/lib/node_modules/openclaw/bin/openclaw.js\" \\\n" +
-                "  \"$PREFIX/lib/node_modules/openclaw/dist/index.js\"; do\n" +
-                "  if [ -f \"$CANDIDATE\" ]; then\n" +
-                "    ENTRY=\"$CANDIDATE\"\n" +
-                "    break\n" +
-                "  fi\n" +
-                "done\n" +
-                "if [ -z \"$ENTRY\" ]; then\n" +
-                "  echo \"openclaw entrypoint not found under $PREFIX/lib/node_modules/openclaw\" >&2\n" +
-                "  exit 127\n" +
-                "fi\n" +
-                "export SSL_CERT_FILE=\"$PREFIX/etc/tls/cert.pem\"\n" +
-                OpenclawVersionUtils.buildNodeOptionsExportCommand(oldSpaceMb) +
-                "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n" +
-                "BOTDROP_OPENCLAW_WRAPPER\n" +
-                "    chmod 755 $PREFIX/bin/openclaw\n" +
-                "    KOFFI_DIR=\"$PREFIX/lib/node_modules/openclaw/node_modules/koffi\"\n" +
-                "    KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
-                "    if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
-                "      if [ ! -f \"$KOFFI_INDEX.orig\" ]; then\n" +
-                "        cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
-                "      fi\n" +
-                "      cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
-                "module.exports = {\n" +
-                "  load() {\n" +
-                "    throw new Error(\"koffi native module not available on this platform\");\n" +
-                "  }\n" +
-                "};\n" +
-                "BOTDROP_KOFFI_MOCK\n" +
-                "    else\n" +
-                "      echo \"BOTDROP_INFO:Koffi module not found, skip mock patch\"\n" +
-                "    fi\n" +
-                "    echo \"BOTDROP_STEP:2:DONE\"\n" +
-                "    touch \"$MARKER\"\n" +
-                "    echo \"BOTDROP_COMPLETE\"\n" +
-                "else\n" +
-                "    echo \"BOTDROP_ERROR:npm install failed (exit $NPM_EXIT): $NPM_OUTPUT\"\n" +
-                "    exit 1\n" +
-                "fi\n";
+                buildOpenclawInstallScriptBody(openclawVersion, oldSpaceMb);
 
             try (FileOutputStream fos = new FileOutputStream(installScript)) {
                 fos.write(installContent.getBytes());
             }
             //noinspection OctalInteger
             Os.chmod(installScript.getAbsolutePath(), 0755);
+
+            File installQqbotScript = new File(botdropDir, "install-qqbot-offline.sh");
+            try (FileOutputStream fos = new FileOutputStream(installQqbotScript)) {
+                fos.write(BundledOpenclawUtils.buildOfflineQqbotInstallScriptBody().getBytes());
+            }
+            //noinspection OctalInteger
+            Os.chmod(installQqbotScript.getAbsolutePath(), 0755);
 
             // --- 2. Create profile.d env script ---
 
@@ -596,6 +553,110 @@ public final class TermuxInstaller {
             "        rm -f \"$f\"\n" +
             "    fi\n" +
             "done\n";
+    }
+
+    private static String buildOpenclawInstallScriptBody(String openclawVersion, int oldSpaceMb) {
+        String requestedInstallSpec = OpenclawVersionUtils.normalizeInstallVersion(openclawVersion);
+        if (requestedInstallSpec == null) {
+            requestedInstallSpec = "openclaw@latest";
+        }
+
+        String bundledWrapperNodePath = BundledOpenclawUtils.STAGED_CURRENT_RUNTIME_LINK
+            + "/node_modules:$PREFIX/lib/node_modules";
+
+        return
+            "echo \"BOTDROP_STEP:2:START:Installing OpenClaw\"\n" +
+            "REQUESTED_INSTALL_SPEC='" + requestedInstallSpec + "'\n" +
+            "OFFLINE_ROOT=\"" + BundledOpenclawUtils.STAGED_ROOT + "\"\n" +
+            "OFFLINE_MANIFEST=\"$OFFLINE_ROOT/manifest.properties\"\n" +
+            "OFFLINE_RUNTIME_ROOT=\"" + BundledOpenclawUtils.STAGED_RUNTIME_ROOT + "\"\n" +
+            "OFFLINE_CURRENT_LINK=\"" + BundledOpenclawUtils.STAGED_CURRENT_RUNTIME_LINK + "\"\n" +
+            "GLOBAL_NODE_MODULES_ROOT=\"" + BundledOpenclawUtils.GLOBAL_NODE_MODULES_ROOT + "\"\n" +
+            "GLOBAL_OPENCLAW_LINK=\"" + BundledOpenclawUtils.GLOBAL_OPENCLAW_PACKAGE_LINK + "\"\n" +
+            "if [ ! -f \"$OFFLINE_MANIFEST\" ]; then\n" +
+            "    echo \"BOTDROP_ERROR:Bundled OpenClaw assets are missing from the APK\"\n" +
+            "    exit 1\n" +
+            "fi\n" +
+            ". \"$OFFLINE_MANIFEST\"\n" +
+            "USE_BUNDLED_OPENCLAW=0\n" +
+            "if [ -n \"$installSpec\" ] && [ -f \"$OFFLINE_ROOT/${runtimeArchive:-"
+                + BundledOpenclawUtils.DEFAULT_RUNTIME_ARCHIVE_NAME + "}\" ]; then\n" +
+            "    if [ \"$REQUESTED_INSTALL_SPEC\" = \"openclaw@latest\" ] || [ \"$REQUESTED_INSTALL_SPEC\" = \"$installSpec\" ]; then\n" +
+                "        USE_BUNDLED_OPENCLAW=1\n" +
+            "    fi\n" +
+            "fi\n" +
+            "if [ \"$USE_BUNDLED_OPENCLAW\" = \"1\" ]; then\n" +
+            "    BUNDLED_VERSION=\"${version:-" + requestedInstallSpec.replace("openclaw@", "") + "}\"\n" +
+            "    BUNDLED_RUNTIME_ARCHIVE=\"${runtimeArchive:-" + BundledOpenclawUtils.DEFAULT_RUNTIME_ARCHIVE_NAME + "}\"\n" +
+            "    TARGET_DIR=\"$OFFLINE_RUNTIME_ROOT/$BUNDLED_VERSION\"\n" +
+            "    TMP_DIR=\"$TARGET_DIR.tmp\"\n" +
+            "    rm -rf \"$TMP_DIR\"\n" +
+            "    mkdir -p \"$TMP_DIR\"\n" +
+            "    case \"$BUNDLED_RUNTIME_ARCHIVE\" in\n" +
+            "      *.tar.gz|*.tgz) tar -xzf \"$OFFLINE_ROOT/$BUNDLED_RUNTIME_ARCHIVE\" -C \"$TMP_DIR\" ;;\n" +
+            "      *) tar -xf \"$OFFLINE_ROOT/$BUNDLED_RUNTIME_ARCHIVE\" -C \"$TMP_DIR\" ;;\n" +
+            "    esac\n" +
+            "    EXTRACTED_NODE_MODULES=\"\"\n" +
+            "    for CANDIDATE in \\\n" +
+            "      \"$TMP_DIR/node_modules\" \\\n" +
+            "      \"$TMP_DIR/node_modules-pruned\" \\\n" +
+            "      \"$TMP_DIR/package/node_modules\" \\\n" +
+            "      \"$TMP_DIR/bundle/node_modules\"; do\n" +
+            "      if [ -d \"$CANDIDATE/openclaw\" ]; then\n" +
+            "        EXTRACTED_NODE_MODULES=\"$CANDIDATE\"\n" +
+            "        break\n" +
+            "      fi\n" +
+            "    done\n" +
+            "    if [ -z \"$EXTRACTED_NODE_MODULES\" ]; then\n" +
+            "      MAYBE_NODE_MODULES=$(find \"$TMP_DIR\" -mindepth 1 -maxdepth 3 -type d -name node_modules | head -n 1)\n" +
+            "      if [ -n \"$MAYBE_NODE_MODULES\" ] && [ -d \"$MAYBE_NODE_MODULES/openclaw\" ]; then\n" +
+            "        EXTRACTED_NODE_MODULES=\"$MAYBE_NODE_MODULES\"\n" +
+            "      fi\n" +
+            "    fi\n" +
+            "    if [ -z \"$EXTRACTED_NODE_MODULES\" ]; then\n" +
+            "      echo \"BOTDROP_ERROR:Bundled OpenClaw archive missing node_modules/openclaw\"\n" +
+            "      rm -rf \"$TMP_DIR\"\n" +
+            "      exit 1\n" +
+            "    fi\n" +
+            "    rm -rf \"$TARGET_DIR\"\n" +
+            "    mkdir -p \"$TARGET_DIR\"\n" +
+            "    mv \"$EXTRACTED_NODE_MODULES\" \"$TARGET_DIR/node_modules\"\n" +
+            "    rm -rf \"$TMP_DIR\"\n" +
+            "    ln -sfn \"$TARGET_DIR\" \"$OFFLINE_CURRENT_LINK\"\n" +
+            "    mkdir -p \"$GLOBAL_NODE_MODULES_ROOT\"\n" +
+            "    ln -sfn \"$OFFLINE_CURRENT_LINK/node_modules/openclaw\" \"$GLOBAL_OPENCLAW_LINK\"\n" +
+            "    cat > $PREFIX/bin/openclaw <<'BOTDROP_OPENCLAW_WRAPPER'\n" +
+            "#!" + com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash\n" +
+            "PREFIX=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +
+            "RUNTIME_ROOT=\"$PREFIX/share/botdrop/openclaw-runtime/current\"\n" +
+            OpenclawVersionUtils.buildOpenclawWrapperBody(
+                "$RUNTIME_ROOT/node_modules/openclaw",
+                bundledWrapperNodePath,
+                oldSpaceMb
+            ) +
+            "BOTDROP_OPENCLAW_WRAPPER\n" +
+            "    chmod 755 $PREFIX/bin/openclaw\n" +
+            "    KOFFI_DIR=\"$OFFLINE_CURRENT_LINK/node_modules/openclaw/node_modules/koffi\"\n" +
+            "    KOFFI_INDEX=\"$KOFFI_DIR/index.js\"\n" +
+            "    if [ -d \"$KOFFI_DIR\" ] && [ -f \"$KOFFI_INDEX\" ]; then\n" +
+            "      if [ ! -f \"$KOFFI_INDEX.orig\" ]; then\n" +
+            "        cp \"$KOFFI_INDEX\" \"$KOFFI_INDEX.orig\"\n" +
+            "      fi\n" +
+            "      cat > \"$KOFFI_INDEX\" <<'BOTDROP_KOFFI_MOCK'\n" +
+            "module.exports = {\n" +
+            "  load() {\n" +
+            "    throw new Error(\"koffi native module not available on this platform\");\n" +
+            "  }\n" +
+            "};\n" +
+            "BOTDROP_KOFFI_MOCK\n" +
+            "    fi\n" +
+            "    echo \"BOTDROP_STEP:2:DONE\"\n" +
+            "    touch \"$MARKER\"\n" +
+            "    echo \"BOTDROP_COMPLETE\"\n" +
+            "else\n" +
+            "    echo \"BOTDROP_ERROR:Requested $REQUESTED_INSTALL_SPEC is not available in the bundled OpenClaw runtime ($installSpec)\"\n" +
+            "    exit 1\n" +
+            "fi\n";
     }
 
     private static long getDeviceTotalRamMb(Context context) {

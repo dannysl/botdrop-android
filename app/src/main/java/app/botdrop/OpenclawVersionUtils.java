@@ -209,6 +209,43 @@ public final class OpenclawVersionUtils {
             + "botdrop_set_openclaw_node_options\n";
     }
 
+    public static String buildOpenclawWrapperBody(String packageRootExpr, String nodePathExpr, int oldSpaceMb) {
+        return "PACKAGE_ROOT=\"" + packageRootExpr + "\"\n"
+            + "PACKAGE_JSON=\"$PACKAGE_ROOT/package.json\"\n"
+            + "if [ \"$#\" -eq 1 ] && [ \"$1\" = \"version\" ]; then\n"
+            + "  set -- --version\n"
+            + "fi\n"
+            + "case \"$1\" in\n"
+            + "  -V|--version)\n"
+            + "    VERSION=\"$(sed -n 's/^[[:space:]]*\\\"version\\\":[[:space:]]*\\\"\\([^\\\"]*\\)\\\".*/\\1/p' \"$PACKAGE_JSON\" | head -n 1)\"\n"
+            + "    if [ -n \"$VERSION\" ]; then\n"
+            + "      printf 'OpenClaw %s\\n' \"$VERSION\"\n"
+            + "    else\n"
+            + "      echo \"OpenClaw\"\n"
+            + "    fi\n"
+            + "    exit 0\n"
+            + "    ;;\n"
+            + "esac\n"
+            + "ENTRY=\"\"\n"
+            + "for CANDIDATE in \\\n"
+            + "  \"$PACKAGE_ROOT/dist/cli.js\" \\\n"
+            + "  \"$PACKAGE_ROOT/bin/openclaw.js\" \\\n"
+            + "  \"$PACKAGE_ROOT/dist/index.js\"; do\n"
+            + "  if [ -f \"$CANDIDATE\" ]; then\n"
+            + "    ENTRY=\"$CANDIDATE\"\n"
+            + "    break\n"
+            + "  fi\n"
+            + "done\n"
+            + "if [ -z \"$ENTRY\" ]; then\n"
+            + "  echo \"openclaw entrypoint not found under $PACKAGE_ROOT\" >&2\n"
+            + "  exit 127\n"
+            + "fi\n"
+            + "export SSL_CERT_FILE=\"$PREFIX/etc/tls/cert.pem\"\n"
+            + "export NODE_PATH=\"" + nodePathExpr + "\"\n"
+            + buildNodeOptionsExportCommand(oldSpaceMb)
+            + "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n";
+    }
+
     private static String buildVersionEnvironmentPrepCommand() {
         return
             "mkdir -p " + BOTDROP_APT_SOURCES_LIST_D + "\n" +

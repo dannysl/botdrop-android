@@ -4,9 +4,13 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import android.content.Context;
+
 import java.io.File;
+import java.io.FileWriter;
 
 import static org.junit.Assert.*;
 
@@ -130,6 +134,63 @@ public class BotDropServiceTest {
         assertFalse("OpenClaw should not be installed in test env", openclaw);
         assertNull("Version should be null in test env", version);
         assertFalse("Config should not exist in test env", configured);
+    }
+
+    @Test
+    public void testResolveInstallVersionPreference_defaultsToLatest() {
+        Context context = RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("botdrop_settings", Context.MODE_PRIVATE)
+            .edit()
+            .remove("openclaw_install_version")
+            .commit();
+
+        assertEquals("openclaw@latest", BotDropService.resolveInstallVersionPreference(context));
+    }
+
+    @Test
+    public void testResolveInstallVersionPreference_readsStoredVersion() {
+        Context context = RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("botdrop_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putString("openclaw_install_version", "openclaw@2026.3.13")
+            .commit();
+
+        assertEquals("openclaw@2026.3.13", BotDropService.resolveInstallVersionPreference(context));
+    }
+
+    @Test
+    public void testFindOpenclawVersion_prefersBundledRuntimeOverLegacyGlobalInstall() throws Exception {
+        File tempDir = new File(RuntimeEnvironment.getApplication().getCacheDir(), "openclaw-version-test");
+        assertTrue(tempDir.mkdirs() || tempDir.isDirectory());
+
+        File bundled = new File(tempDir, "bundled-package.json");
+        File legacy = new File(tempDir, "legacy-package.json");
+        writePackageJsonVersion(bundled, "2026.3.13");
+        writePackageJsonVersion(legacy, "2026.2.6");
+
+        assertEquals("2026.3.13", BotDropService.findOpenclawVersion(bundled, legacy));
+    }
+
+    @Test
+    public void testFindOpenclawVersion_fallsBackToLegacyGlobalInstall() throws Exception {
+        File tempDir = new File(RuntimeEnvironment.getApplication().getCacheDir(), "openclaw-version-fallback-test");
+        assertTrue(tempDir.mkdirs() || tempDir.isDirectory());
+
+        File missingBundled = new File(tempDir, "missing-bundled-package.json");
+        File legacy = new File(tempDir, "legacy-package.json");
+        writePackageJsonVersion(legacy, "2026.2.6");
+
+        assertEquals("2026.2.6", BotDropService.findOpenclawVersion(missingBundled, legacy));
+    }
+
+    private static void writePackageJsonVersion(File file, String version) throws Exception {
+        File parent = file.getParentFile();
+        if (parent != null) {
+            assertTrue(parent.mkdirs() || parent.isDirectory());
+        }
+        try (FileWriter writer = new FileWriter(file)) {
+            writer.write("{\"version\":\"" + version + "\"}");
+        }
     }
 
     /**

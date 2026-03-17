@@ -236,4 +236,21 @@ public class OpenclawVersionUtilsTest {
                 + "  if [ -z \"$resolved\" ]; then\n"));
         assertFalse(command.contains("botdrop_npm_trace()"));
     }
+
+    @Test
+    public void testBuildOpenclawWrapperBody_addsFastVersionPath() {
+        String script = OpenclawVersionUtils.buildOpenclawWrapperBody(
+            "$RUNTIME_ROOT/node_modules/openclaw",
+            "$RUNTIME_ROOT/node_modules:$PREFIX/lib/node_modules",
+            2048
+        );
+
+        assertTrue(script.contains("if [ \"$#\" -eq 1 ] && [ \"$1\" = \"version\" ]; then"));
+        assertTrue(script.contains("set -- --version"));
+        assertTrue(script.contains("case \"$1\" in\n  -V|--version)"));
+        assertTrue(script.contains("printf 'OpenClaw %s\\n' \"$VERSION\""));
+        assertTrue(script.contains("PACKAGE_ROOT=\"$RUNTIME_ROOT/node_modules/openclaw\""));
+        assertTrue(script.contains("export NODE_PATH=\"$RUNTIME_ROOT/node_modules:$PREFIX/lib/node_modules\""));
+        assertTrue(script.contains("exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\""));
+    }
 }

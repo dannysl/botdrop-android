@@ -2,6 +2,7 @@ package app.botdrop;
 
 import android.app.ActivityManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Binder;
@@ -11,6 +12,7 @@ import android.os.Looper;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.app.TermuxInstaller;
 
 import app.botdrop.shizuku.ShizukuManager;
 import app.botdrop.shizuku.ShizukuShellExecutor;
@@ -43,6 +45,11 @@ public class BotDropService extends Service {
     private static final String BOTDROP_APT_LIST_FILE = BOTDROP_APT_SOURCES_LIST_D + "/botdrop.list";
     private static final long SHARP_INSTALL_RETRY_INTERVAL_MS = 10 * 60 * 1000L;
     private static final String BOTDROP_SHARED_ROOT = "/data/local/tmp/botdrop_tmp";
+    private static final String OPENCLAW_OFFLINE_PACKAGE_JSON =
+        TermuxConstants.TERMUX_PREFIX_DIR_PATH
+            + "/share/botdrop/openclaw-runtime/current/node_modules/openclaw/package.json";
+    private static final String OPENCLAW_GLOBAL_PACKAGE_JSON =
+        TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules/openclaw/package.json";
 
     private final IBinder mBinder = new LocalBinder();
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
@@ -482,6 +489,33 @@ public class BotDropService extends Service {
         return "Embedded bridge unavailable: " + mShizukuManager.getStatus();
     }
 
+    static String resolveInstallVersionPreference(Context context) {
+        String requested = context
+            .getSharedPreferences("botdrop_settings", Context.MODE_PRIVATE)
+            .getString("openclaw_install_version", "openclaw@latest");
+        String preferred = BundledOpenclawUtils.resolvePreferredInstallSpec(
+            requested,
+            BundledOpenclawUtils.loadManifest(context)
+        );
+        return preferred != null ? preferred : "openclaw@latest";
+    }
+
+    private void stageBundledOpenclawAssetsIfPresent() {
+        BundledOpenclawUtils.Manifest manifest = BundledOpenclawUtils.loadManifest(this);
+        if (manifest == null) {
+            return;
+        }
+
+        File stagedRoot = new File(BundledOpenclawUtils.STAGED_ROOT);
+        deleteRecursively(stagedRoot);
+        try {
+            copyAssetDir(BundledOpenclawUtils.ASSET_ROOT, BundledOpenclawUtils.STAGED_ROOT);
+            Logger.logInfo(LOG_TAG, "Staged bundled OpenClaw assets for " + manifest.installSpec);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "Failed to stage bundled OpenClaw assets: " + e.getMessage());
+        }
+    }
+
     /**
      * Install OpenClaw by calling the standalone install.sh script.
      * Parses structured output lines for progress reporting:
@@ -495,6 +529,9 @@ public class BotDropService extends Service {
         final String INSTALL_SCRIPT = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/botdrop/install.sh";
 
         if (!safeExecute(mExecutor, () -> {
+            TermuxInstaller.createBotDropScripts(this, resolveInstallVersionPreference(this));
+            stageBundledOpenclawAssetsIfPresent();
+
             // Verify install script exists
             if (!new java.io.File(INSTALL_SCRIPT).exists()) {
                 mHandler.post(() -> callback.onError(
@@ -623,11 +660,23 @@ public class BotDropService extends Service {
      * Get OpenClaw version (synchronously)
      */
     public static String getOpenclawVersion() {
+        return findOpenclawVersion(
+            new java.io.File(OPENCLAW_OFFLINE_PACKAGE_JSON),
+            new java.io.File(OPENCLAW_GLOBAL_PACKAGE_JSON)
+        );
+    }
+
+    static String findOpenclawVersion(java.io.File... packageJsonCandidates) {
         try {
-            java.io.File packageJson = new java.io.File(
-                TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules/openclaw/package.json"
-            );
-            if (packageJson.exists()) {
+            if (packageJsonCandidates == null) {
+                return null;
+            }
+
+            for (java.io.File packageJson : packageJsonCandidates) {
+                if (packageJson == null || !packageJson.exists()) {
+                    continue;
+                }
+
                 // Use try-with-resources to avoid resource leak
                 try (java.io.BufferedReader reader = new java.io.BufferedReader(
                     new java.io.FileReader(packageJson)
@@ -637,10 +686,13 @@ public class BotDropService extends Service {
                     while ((line = reader.readLine()) != null) {
                         content.append(line);
                     }
-                    
+
                     // Use JSONObject for reliable parsing
                     org.json.JSONObject json = new org.json.JSONObject(content.toString());
-                    return json.optString("version", null);
+                    String version = json.optString("version", null);
+                    if (version != null && !version.isEmpty()) {
+                        return version;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -847,6 +899,23 @@ public class BotDropService extends Service {
         }
     }
 
+    private void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursively(child);
+            }
+        }
+
+        if (!file.delete()) {
+            Logger.logWarn(LOG_TAG, "Failed to delete path: " + file.getAbsolutePath());
+        }
+    }
+
     public void stopGateway(CommandCallback callback) {
         // PID files can be stale and the gateway may spawn children. Use best-effort cleanup to
         // prevent port 18789 conflicts and restart storms.
@@ -972,23 +1041,11 @@ public class BotDropService extends Service {
                     "cat > $PREFIX/bin/openclaw <<'BOTDROP_OPENCLAW_WRAPPER'\n" +
                     "#!" + binPrefix + "/bash\n" +
                     "PREFIX=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +
-                    "ENTRY=\"\"\n" +
-                    "for CANDIDATE in \\\n" +
-                    "  \"$PREFIX/lib/node_modules/openclaw/dist/cli.js\" \\\n" +
-                    "  \"$PREFIX/lib/node_modules/openclaw/bin/openclaw.js\" \\\n" +
-                    "  \"$PREFIX/lib/node_modules/openclaw/dist/index.js\"; do\n" +
-                    "  if [ -f \"$CANDIDATE\" ]; then\n" +
-                    "    ENTRY=\"$CANDIDATE\"\n" +
-                    "    break\n" +
-                    "  fi\n" +
-                    "done\n" +
-                    "if [ -z \"$ENTRY\" ]; then\n" +
-                    "  echo \"openclaw entrypoint not found under $PREFIX/lib/node_modules/openclaw\" >&2\n" +
-                    "  exit 127\n" +
-                    "fi\n" +
-                    "export SSL_CERT_FILE=\"$PREFIX/etc/tls/cert.pem\"\n" +
-                    buildNodeOptionsExport() +
-                    "exec \"$PREFIX/bin/termux-chroot\" \"$PREFIX/bin/node\" \"$ENTRY\" \"$@\"\n" +
+                    OpenclawVersionUtils.buildOpenclawWrapperBody(
+                        "$PREFIX/lib/node_modules/openclaw",
+                        "$PREFIX/lib/node_modules",
+                        oldSpaceMb
+                    ) +
                     "BOTDROP_OPENCLAW_WRAPPER\n" +
                     "chmod 755 $PREFIX/bin/openclaw\n" +
                     "echo done\n";

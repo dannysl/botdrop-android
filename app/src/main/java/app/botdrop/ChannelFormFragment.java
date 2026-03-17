@@ -32,11 +32,13 @@ import androidx.fragment.app.Fragment;
 
 import com.termux.R;
 import com.termux.app.AnalyticsManager;
+import com.termux.app.TermuxInstaller;
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.Iterator;
 import java.util.regex.Pattern;
 
@@ -49,9 +51,8 @@ public abstract class ChannelFormFragment extends Fragment {
     private static final String QQBOT_PLUGIN_IDENTIFIER = "sliverp/qqbot";
     private static final String QQBOT_PLUGIN_ID_FALLBACK = "qqbot";
     private static final String QQBOT_PLUGIN_ENTRY_ID = "qqbot";
-    private static final String QQBOT_PLUGIN_INSTALL_COMMAND = "openclaw plugins install @sliverp/qqbot@latest";
     private static final int QQBOT_PLUGIN_LIST_TIMEOUT_SECONDS = 120;
-    private static final int QQBOT_PLUGIN_INSTALL_TIMEOUT_SECONDS = 300;
+    private static final int QQBOT_PLUGIN_INSTALL_TIMEOUT_SECONDS = 180;
     private static final long CONNECT_PENDING_DIALOG_DELAY_MS = 0L;
     private static final int CONNECT_SUCCESS_HOLD_MS = 180;
 
@@ -473,6 +474,53 @@ public abstract class ChannelFormFragment extends Fragment {
             return;
         }
 
+        if (isBundledQqBotPluginAvailable()) {
+            Logger.logInfo(LOG_TAG, "QQ Bot plugin already staged locally");
+            showConnectPendingProgressWithMessage(R.string.botdrop_starting_gateway);
+            writeConfigAndStartGateway(token, ownerId, feishuUserId, guildId);
+            return;
+        }
+
+        if (isBundledQqBotPluginSourceAvailable()) {
+            Logger.logInfo(LOG_TAG, "Installing QQ Bot plugin with bundled offline script");
+            showConnectPendingProgressWithMessage(R.string.botdrop_progress_installing_qqbot_plugin);
+            Context context = getContext();
+            if (context != null) {
+                TermuxInstaller.createBotDropScripts(
+                    context,
+                    BotDropService.resolveInstallVersionPreference(context)
+                );
+            }
+            mService.executeCommand(
+                BundledOpenclawUtils.buildOfflineQqbotInstallCommand(),
+                QQBOT_PLUGIN_INSTALL_TIMEOUT_SECONDS,
+                installResult -> {
+                    if (!isAdded() || getActivity() == null || getActivity().isFinishing()) {
+                        hideConnectPendingProgress();
+                        return;
+                    }
+
+                    if (isQqBotPluginInstalled(installResult)
+                        || isQqBotPluginConfiguredInLocalConfig()
+                        || isBundledQqBotPluginAvailable()) {
+                        Logger.logInfo(LOG_TAG, "QQ Bot plugin installed by bundled offline script");
+                        showConnectPendingProgressWithMessage(R.string.botdrop_starting_gateway);
+                        writeConfigAndStartGateway(token, ownerId, feishuUserId, guildId);
+                        return;
+                    }
+
+                    Logger.logWarn(LOG_TAG, "Bundled QQ Bot offline install did not produce an installed plugin");
+                    hideConnectPendingProgress();
+                    showError(getString(
+                        R.string.botdrop_install_failed,
+                        "Bundled QQ Bot offline install failed."
+                    ));
+                    resetButton();
+                }
+            );
+            return;
+        }
+
         mService.executeCommand("openclaw plugins list", QQBOT_PLUGIN_LIST_TIMEOUT_SECONDS, listResult -> {
             if (!isAdded() || getActivity() == null || getActivity().isFinishing()) {
                 hideConnectPendingProgress();
@@ -486,36 +534,13 @@ public abstract class ChannelFormFragment extends Fragment {
                 return;
             }
 
-            showConnectPendingProgressWithMessage(R.string.botdrop_progress_installing_qqbot_plugin);
-
-            mService.executeCommand(
-                OpenclawVersionUtils.buildNpmAwareCommand(QQBOT_PLUGIN_INSTALL_COMMAND),
-                QQBOT_PLUGIN_INSTALL_TIMEOUT_SECONDS,
-                installResult -> {
-                    if (!isAdded() || getActivity() == null || getActivity().isFinishing()) {
-                        hideConnectPendingProgress();
-                        return;
-                    }
-
-                    if (installResult.success || isQqBotPluginInstallNoop(installResult)) {
-                        Logger.logInfo(LOG_TAG, "QQ Bot plugin installation completed");
-                        showConnectPendingProgressWithMessage(R.string.botdrop_starting_gateway);
-                        writeConfigAndStartGateway(token, ownerId, feishuUserId, guildId);
-                        return;
-                    }
-
-                    Logger.logError(LOG_TAG, "Failed to install QQ Bot plugin: " + installResult.stderr);
-                    String errorMsg = installResult.stderr;
-                    if (TextUtils.isEmpty(errorMsg)) {
-                        errorMsg = installResult.stdout;
-                    }
-                    if (TextUtils.isEmpty(errorMsg)) {
-                        errorMsg = getString(R.string.botdrop_unknown_error_exit_code, installResult.exitCode);
-                    }
-                    hideConnectPendingProgress();
-                    showError(getString(R.string.botdrop_install_failed, errorMsg));
-                    resetButton();
-                });
+            Logger.logWarn(LOG_TAG, "QQ Bot plugin not found in bundled runtime");
+            hideConnectPendingProgress();
+            showError(getString(
+                R.string.botdrop_install_failed,
+                "Bundled QQ Bot plugin not found. Reinstall OpenClaw."
+            ));
+            resetButton();
         });
     }
 
@@ -564,33 +589,26 @@ public abstract class ChannelFormFragment extends Fragment {
             || hasStandalonePluginIdentifier(lower, QQBOT_PLUGIN_ID_FALLBACK);
     }
 
+    private boolean isBundledQqBotPluginAvailable() {
+        File pluginManifest = new File(
+            BundledOpenclawUtils.STAGED_QQBOT_PLUGIN_DIR,
+            "openclaw.plugin.json"
+        );
+        return pluginManifest.isFile();
+    }
+
+    private boolean isBundledQqBotPluginSourceAvailable() {
+        File pluginManifest = new File(
+            BundledOpenclawUtils.STAGED_QQBOT_PLUGIN_SOURCE_DIR,
+            "openclaw.plugin.json"
+        );
+        return pluginManifest.isFile();
+    }
+
     private boolean hasStandalonePluginIdentifier(String output, String token) {
         String escaped = Pattern.quote(token);
         String boundaryPattern = "(^|[^a-z0-9_./-])" + escaped + "(?=[^a-z0-9_./-]|$)";
         return java.util.regex.Pattern.compile(boundaryPattern).matcher(output).find();
-    }
-
-    private boolean isQqBotPluginInstallNoop(BotDropService.CommandResult result) {
-        if (result == null) {
-            return false;
-        }
-
-        return isQqBotPluginInstallNoop(result.stdout)
-            || isQqBotPluginInstallNoop(result.stderr);
-    }
-
-    private boolean isQqBotPluginInstallNoop(String output) {
-        if (TextUtils.isEmpty(output)) {
-            return false;
-        }
-
-        String lower = output.toLowerCase(java.util.Locale.ROOT);
-        return lower.contains("already installed")
-            || lower.contains("already up to date")
-            || lower.contains("nothing to install")
-            || lower.contains("already exists")
-            || lower.contains("skipping")
-            || lower.contains("already have");
     }
 
     private void preloadExistingConfig() {
