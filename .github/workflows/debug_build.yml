@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BOTDROP_QQBOT_VERSION: '1.5.4'
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +25,39 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build offline OpenClaw bundle assets
+        shell: bash {0}
+        run: |
+          set -euo pipefail
+
+          BUNDLED_OPENCLAW_VERSION="$(
+            sed -n 's/^def bundledOpenclawVersion = System.getenv("BOTDROP_BUNDLED_OPENCLAW_VERSION") ?: "\(.*\)"$/\1/p' app/build.gradle | head -n 1
+          )"
+          if [ -z "$BUNDLED_OPENCLAW_VERSION" ]; then
+            echo "::error::Failed to resolve bundled OpenClaw version from app/build.gradle"
+            exit 1
+          fi
+
+          ./scripts/build-openclaw-bundle.sh "$BUNDLED_OPENCLAW_VERSION"
+          ./scripts/build-qqbot-plugin-bundle.sh "$BOTDROP_QQBOT_VERSION"
+
+          BOTDROP_OPENCLAW_BUNDLE_TGZ="$PWD/build/openclaw-bundles/openclaw-runtime-${BUNDLED_OPENCLAW_VERSION}.tar"
+          BOTDROP_QQBOT_PLUGIN_DIR="$PWD/build/openclaw-bundles/qqbot-sliverp-qqbot-${BOTDROP_QQBOT_VERSION}/package"
+
+          test -f "$BOTDROP_OPENCLAW_BUNDLE_TGZ"
+          test -d "$BOTDROP_QQBOT_PLUGIN_DIR"
+
+          {
+            echo "BOTDROP_BUNDLED_OPENCLAW_VERSION=$BUNDLED_OPENCLAW_VERSION"
+            echo "BOTDROP_OPENCLAW_BUNDLE_TGZ=$BOTDROP_OPENCLAW_BUNDLE_TGZ"
+            echo "BOTDROP_QQBOT_PLUGIN_DIR=$BOTDROP_QQBOT_PLUGIN_DIR"
+          } >> "$GITHUB_ENV"
 
       - name: Build APKs
         shell: bash {0}
