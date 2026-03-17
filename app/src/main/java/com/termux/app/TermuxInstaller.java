@@ -572,7 +572,6 @@ public final class TermuxInstaller {
             "OFFLINE_RUNTIME_ROOT=\"" + BundledOpenclawUtils.STAGED_RUNTIME_ROOT + "\"\n" +
             "OFFLINE_CURRENT_LINK=\"" + BundledOpenclawUtils.STAGED_CURRENT_RUNTIME_LINK + "\"\n" +
             "GLOBAL_NODE_MODULES_ROOT=\"" + BundledOpenclawUtils.GLOBAL_NODE_MODULES_ROOT + "\"\n" +
-            "GLOBAL_OPENCLAW_LINK=\"" + BundledOpenclawUtils.GLOBAL_OPENCLAW_PACKAGE_LINK + "\"\n" +
             "if [ ! -f \"$OFFLINE_MANIFEST\" ]; then\n" +
             "    echo \"BOTDROP_ERROR:Bundled OpenClaw assets are missing from the APK\"\n" +
             "    exit 1\n" +
@@ -624,7 +623,11 @@ public final class TermuxInstaller {
             "    rm -rf \"$TMP_DIR\"\n" +
             "    ln -sfn \"$TARGET_DIR\" \"$OFFLINE_CURRENT_LINK\"\n" +
             "    mkdir -p \"$GLOBAL_NODE_MODULES_ROOT\"\n" +
-            "    ln -sfn \"$OFFLINE_CURRENT_LINK/node_modules/openclaw\" \"$GLOBAL_OPENCLAW_LINK\"\n" +
+            "    for entry in \"$OFFLINE_CURRENT_LINK/node_modules\"/*; do\n" +
+            "      [ -e \"$entry\" ] || continue\n" +
+            "      entry_name=\"$(basename \"$entry\")\"\n" +
+            "      ln -sfn \"$entry\" \"$GLOBAL_NODE_MODULES_ROOT/$entry_name\"\n" +
+            "    done\n" +
             "    cat > $PREFIX/bin/openclaw <<'BOTDROP_OPENCLAW_WRAPPER'\n" +
             "#!" + com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash\n" +
             "PREFIX=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +

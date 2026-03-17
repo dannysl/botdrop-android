@@ -27,8 +27,6 @@ public final class BundledOpenclawUtils {
     public static final String STAGED_CURRENT_RUNTIME_LINK = STAGED_RUNTIME_ROOT + "/current";
     public static final String GLOBAL_NODE_MODULES_ROOT =
         TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules";
-    public static final String GLOBAL_OPENCLAW_PACKAGE_LINK =
-        GLOBAL_NODE_MODULES_ROOT + "/openclaw";
     public static final String STAGED_QQBOT_PLUGIN_SOURCE_DIR = STAGED_ROOT + "/" + DEFAULT_QQBOT_DIR_NAME;
     public static final String STAGED_QQBOT_PLUGIN_DIR = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/extensions/qqbot";
     public static final String OFFLINE_QQBOT_INSTALL_SCRIPT_PATH =

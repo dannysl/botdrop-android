@@ -28,9 +28,11 @@ public class TermuxInstallerTest {
         assertTrue(script.contains("BOTDROP_STEP:2:START:Installing OpenClaw"));
         assertTrue(script.contains("ln -sfn \"$TARGET_DIR\" \"$OFFLINE_CURRENT_LINK\""));
         assertTrue(script.contains("GLOBAL_NODE_MODULES_ROOT=\"/data/data/app.botdrop/files/usr/lib/node_modules\""));
-        assertTrue(script.contains("GLOBAL_OPENCLAW_LINK=\"/data/data/app.botdrop/files/usr/lib/node_modules/openclaw\""));
         assertTrue(script.contains("mkdir -p \"$GLOBAL_NODE_MODULES_ROOT\""));
-        assertTrue(script.contains("ln -sfn \"$OFFLINE_CURRENT_LINK/node_modules/openclaw\" \"$GLOBAL_OPENCLAW_LINK\""));
+        assertTrue(script.contains("for entry in \"$OFFLINE_CURRENT_LINK/node_modules\"/*; do"));
+        assertTrue(script.contains("entry_name=\"$(basename \"$entry\")\""));
+        assertTrue(script.contains("ln -sfn \"$entry\" \"$GLOBAL_NODE_MODULES_ROOT/$entry_name\""));
+        assertFalse(script.contains("GLOBAL_OPENCLAW_LINK=\"/data/data/app.botdrop/files/usr/lib/node_modules/openclaw\""));
         assertFalse(script.contains("OFFLINE_QQBOT_TARGET"));
         assertFalse(script.contains("BUNDLED_QQBOT_DIR"));
         assertFalse(script.contains("QQBOT_SOURCE="));
