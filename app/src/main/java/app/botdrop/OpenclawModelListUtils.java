@@ -12,7 +12,7 @@ public final class OpenclawModelListUtils {
     public static final String FALLBACK_MODEL_LIST_COMMAND = OpenclawVersionUtils.MODEL_LIST_COMMAND;
 
     private static final String MODEL_REGISTRY_MODULE_PATH =
-        "$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js";
+        "$PREFIX/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js";
     private static final String MODELS_JSON_PATH = "$HOME/.openclaw/agents/main/models.json";
 
     private OpenclawModelListUtils() {}

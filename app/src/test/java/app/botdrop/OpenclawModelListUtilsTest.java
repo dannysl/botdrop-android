@@ -3,6 +3,7 @@ package app.botdrop;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class OpenclawModelListUtilsTest {
@@ -11,7 +12,8 @@ public class OpenclawModelListUtilsTest {
     public void buildPreferredModelListCommand_prefersModelRegistryAndFallsBackToOpenclawCli() {
         String command = OpenclawModelListUtils.buildPreferredModelListCommand();
 
-        assertTrue(command.contains("@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
+        assertTrue(command.contains("$PREFIX/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
+        assertFalse(command.contains("$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent"));
         assertTrue(command.contains("setFallbackResolver() {}"));
         assertTrue(command.contains("registry.getAll()"));
         assertTrue(command.contains("model.provider + '/' + model.id"));
