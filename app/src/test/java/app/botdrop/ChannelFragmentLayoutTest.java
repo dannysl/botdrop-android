@@ -31,7 +31,7 @@ public class ChannelFragmentLayoutTest {
         View root = activity.findViewById(android.R.id.content);
 
         assertTrue(containsText(root, activity.getString(R.string.botdrop_connect_im_channels)));
-        assertFalse(containsText(root, activity.getString(R.string.botdrop_step_3_4)));
+        assertFalse(containsText(root, "Step 3/4"));
     }
 
     private boolean containsText(View view, String expectedText) {

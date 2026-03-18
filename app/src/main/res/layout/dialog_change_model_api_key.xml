@@ -35,7 +35,7 @@
                 android:id="@+id/change_model_close_button"
                 android:layout_width="38dp"
                 android:layout_height="38dp"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:src="@drawable/ic_close"
                 android:tint="@color/botdrop_on_background"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/botdrop_close" />

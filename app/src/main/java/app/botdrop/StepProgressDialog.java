@@ -30,6 +30,8 @@ public final class StepProgressDialog {
     private final TextView mStatusText;
     private final Button mCloseButton;
     private final TextView[] mStepIcons = new TextView[MAX_STEPS];
+    private final TextView[] mStepPercents = new TextView[MAX_STEPS];
+    private final int[] mStepPercentValues = new int[MAX_STEPS];
     private final int mStepCount;
     private int mCurrentStep = -1;
 
@@ -53,20 +55,33 @@ public final class StepProgressDialog {
         mStepIcons[2] = dialogView.findViewById(R.id.update_step_2_icon);
         mStepIcons[3] = dialogView.findViewById(R.id.update_step_3_icon);
         mStepIcons[4] = dialogView.findViewById(R.id.update_step_4_icon);
+        mStepPercents[0] = dialogView.findViewById(R.id.update_step_0_percent);
+        mStepPercents[1] = dialogView.findViewById(R.id.update_step_1_percent);
+        mStepPercents[2] = dialogView.findViewById(R.id.update_step_2_percent);
+        mStepPercents[3] = dialogView.findViewById(R.id.update_step_3_percent);
+        mStepPercents[4] = dialogView.findViewById(R.id.update_step_4_percent);
 
         mStepCount = Math.min(MAX_STEPS, stepLabels.size());
         for (int i = 0; i < MAX_STEPS; i++) {
             TextView iconText = stepTexts[i];
             TextView icon = mStepIcons[i];
+            TextView percent = mStepPercents[i];
             if (iconText == null || icon == null) {
                 continue;
             }
             if (i >= mStepCount) {
                 iconText.setVisibility(View.GONE);
                 icon.setVisibility(View.GONE);
+                if (percent != null) {
+                    percent.setVisibility(View.GONE);
+                }
             } else {
                 iconText.setVisibility(View.VISIBLE);
                 icon.setVisibility(View.VISIBLE);
+                if (percent != null) {
+                    percent.setVisibility(View.VISIBLE);
+                    percent.setText(StepPercentUtils.formatPercent(0));
+                }
                 iconText.setText(stepLabels.get(i));
                 icon.setText(ICON_PENDING);
             }
@@ -130,18 +145,42 @@ public final class StepProgressDialog {
         if (nextStep < 0 || nextStep >= mStepCount) {
             return;
         }
-        if (nextStep <= mCurrentStep) {
+        if (nextStep < mCurrentStep) {
             return;
         }
-        for (int i = 0; i <= nextStep && i < mStepCount; i++) {
+        for (int i = 0; i < nextStep && i < mStepCount; i++) {
             if (mStepIcons[i] != null) {
                 mStepIcons[i].setText(ICON_DONE);
             }
+            setStepPercent(i, 100);
         }
         if (mStepIcons[nextStep] != null) {
             mStepIcons[nextStep].setText(ICON_CURRENT);
         }
+        if (nextStep > mCurrentStep) {
+            setStepPercent(nextStep, 0);
+        }
         mCurrentStep = nextStep;
+    }
+
+    public void setStep(int nextStep, @Nullable String message) {
+        setStep(nextStep);
+        if (nextStep < 0 || nextStep >= mStepCount) {
+            return;
+        }
+        int fallback = nextStep == mCurrentStep ? mStepPercentValues[nextStep] : 0;
+        setStepPercent(nextStep, StepPercentUtils.extractPercent(message, fallback));
+    }
+
+    public void setStepPercent(int step, int percent) {
+        if (step < 0 || step >= mStepCount) {
+            return;
+        }
+        int normalized = StepPercentUtils.clampPercent(percent);
+        mStepPercentValues[step] = normalized;
+        if (mStepPercents[step] != null) {
+            mStepPercents[step].setText(StepPercentUtils.formatPercent(normalized));
+        }
     }
 
     public void complete(@Nullable String completionMessage) {
@@ -149,6 +188,7 @@ public final class StepProgressDialog {
             if (mStepIcons[i] != null) {
                 mStepIcons[i].setText(ICON_DONE);
             }
+            setStepPercent(i, 100);
         }
         if (!TextUtils.isEmpty(completionMessage)) {
             setStatus(completionMessage);

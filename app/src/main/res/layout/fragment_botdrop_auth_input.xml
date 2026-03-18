@@ -86,8 +86,9 @@
                     android:id="@+id/auth_input_toggle_visibility"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:src="@android:drawable/ic_menu_view"
+                    android:src="@drawable/ic_visibility"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:tint="@color/botdrop_secondary_text"
                     android:contentDescription="@string/botdrop_toggle_visibility" />
 
             </LinearLayout>
