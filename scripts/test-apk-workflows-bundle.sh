@@ -25,7 +25,14 @@ assert_workflow_bundles_openclaw() {
   assert_contains "$workflow_path" "BOTDROP_QQBOT_PLUGIN_DIR="
 }
 
+assert_release_workflow_builds_split_apks() {
+  local workflow_path=$1
+
+  assert_contains "$workflow_path" "TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS=1"
+}
+
 assert_workflow_bundles_openclaw "$ROOT_DIR/.github/workflows/build-apk.yml"
 assert_workflow_bundles_openclaw "$ROOT_DIR/.github/workflows/debug_build.yml"
+assert_release_workflow_builds_split_apks "$ROOT_DIR/.github/workflows/build-apk.yml"
 
 echo "PASS: APK workflows build and export offline OpenClaw bundle inputs"

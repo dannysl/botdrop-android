@@ -135,6 +135,7 @@ jobs:
           export TERMUX_APP_VERSION_NAME="${RELEASE_VERSION_NAME/v/}"
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG"
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}"
+          export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS=1
 
           # Build release APK with signing
           ./gradlew assembleRelease \
