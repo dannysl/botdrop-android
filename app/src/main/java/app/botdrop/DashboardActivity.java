@@ -113,6 +113,7 @@ public class DashboardActivity extends Activity {
     private static final String OPENCLAW_DEFAULT_WEB_UI_PATH = "/";
     private static final String OPENCLAW_DEFAULT_WEB_UI_URL = "http://127.0.0.1:" + OPENCLAW_DEFAULT_WEB_UI_PORT + OPENCLAW_DEFAULT_WEB_UI_PATH;
     private static final String OPENCLAW_WEB_UI_TOKEN_KEY = "token";
+    private static final boolean DASHBOARD_OPENCLAW_UPDATE_CHECK_ENABLED = false;
     private static final String OPENCLAW_HOME_FOLDER = ".openclaw";
     private static final String BOTDROP_HOME_FOLDER = "botdrop";
     private static final String GATEWAY_LOG_FILE = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.openclaw/gateway.log";
@@ -210,6 +211,10 @@ public class DashboardActivity extends Activity {
         void onUrlResolved(String url);
     }
 
+    static boolean isDashboardOpenclawUpdateCheckEnabled() {
+        return DASHBOARD_OPENCLAW_UPDATE_CHECK_ENABLED;
+    }
+
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -231,7 +236,7 @@ public class DashboardActivity extends Activity {
             loadCurrentModel();
 
             // Check for OpenClaw updates
-            if (!mOpenclawVersionManagementDisabled) {
+            if (isDashboardOpenclawUpdateCheckEnabled() && !mOpenclawVersionManagementDisabled) {
                 checkOpenclawUpdate();
             } else {
                 dismissOpenclawUpdateDialog();
@@ -337,7 +342,8 @@ public class DashboardActivity extends Activity {
         // OpenClaw version + check button
         mOpenclawVersionText = findViewById(R.id.openclaw_version_text);
         mOpenclawCheckUpdateButton = findViewById(R.id.btn_check_openclaw_update);
-        if (mOpenclawCheckUpdateButton != null && mOpenclawVersionManagementDisabled) {
+        if (mOpenclawCheckUpdateButton != null
+            && (!isDashboardOpenclawUpdateCheckEnabled() || mOpenclawVersionManagementDisabled)) {
             mOpenclawCheckUpdateButton.setVisibility(View.GONE);
         } else if (mOpenclawCheckUpdateButton != null) {
             mOpenclawCheckUpdateButton.setOnClickListener(v -> {
@@ -2957,7 +2963,10 @@ public class DashboardActivity extends Activity {
             mOpenclawVersionText.setText(getString(R.string.botdrop_openclaw_version, currentVersion));
         }
 
-        if (mOpenclawVersionManagementDisabled || !mBound || mBotDropService == null) {
+        if (!isDashboardOpenclawUpdateCheckEnabled()
+            || mOpenclawVersionManagementDisabled
+            || !mBound
+            || mBotDropService == null) {
             dismissOpenclawUpdateDialog();
             return;
         }
@@ -2996,7 +3005,7 @@ public class DashboardActivity extends Activity {
     }
 
     private void forceCheckOpenclawUpdate() {
-        if (mOpenclawVersionManagementDisabled) {
+        if (!isDashboardOpenclawUpdateCheckEnabled() || mOpenclawVersionManagementDisabled) {
             dismissOpenclawUpdateDialog();
             return;
         }

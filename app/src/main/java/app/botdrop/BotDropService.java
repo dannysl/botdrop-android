@@ -46,9 +46,6 @@ public class BotDropService extends Service {
     private static final String BOTDROP_APT_LIST_FILE = BOTDROP_APT_SOURCES_LIST_D + "/botdrop.list";
     private static final long SHARP_INSTALL_RETRY_INTERVAL_MS = 10 * 60 * 1000L;
     private static final String BOTDROP_SHARED_ROOT = "/data/local/tmp/botdrop_tmp";
-    private static final String OPENCLAW_OFFLINE_PACKAGE_JSON =
-        TermuxConstants.TERMUX_PREFIX_DIR_PATH
-            + "/share/botdrop/openclaw-runtime/current/node_modules/openclaw/package.json";
     private static final String OPENCLAW_GLOBAL_PACKAGE_JSON =
         TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/lib/node_modules/openclaw/package.json";
 
@@ -682,10 +679,7 @@ public class BotDropService extends Service {
      * Get OpenClaw version (synchronously)
      */
     public static String getOpenclawVersion() {
-        return findOpenclawVersion(
-            new java.io.File(OPENCLAW_OFFLINE_PACKAGE_JSON),
-            new java.io.File(OPENCLAW_GLOBAL_PACKAGE_JSON)
-        );
+        return findOpenclawVersion(new java.io.File(OPENCLAW_GLOBAL_PACKAGE_JSON));
     }
 
     static String findOpenclawVersion(java.io.File... packageJsonCandidates) {

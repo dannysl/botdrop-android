@@ -103,7 +103,7 @@ public final class BundledOpenclawUtils {
     }
 
     public static boolean shouldDisableUpdateManagement(@Nullable Manifest manifest) {
-        return manifest != null;
+        return false;
     }
 
     public static boolean shouldDisableUpdateManagement(@NonNull Context context) {
@@ -111,7 +111,7 @@ public final class BundledOpenclawUtils {
     }
 
     public static boolean shouldDisableVersionManagement(@Nullable Manifest manifest) {
-        return shouldDisableUpdateManagement(manifest);
+        return false;
     }
 
     @NonNull

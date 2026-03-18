@@ -71,7 +71,7 @@ public class BundledOpenclawUtilsTest {
             "qqbot"
         );
 
-        assertTrue(BundledOpenclawUtils.shouldDisableVersionManagement(manifest));
+        assertFalse(BundledOpenclawUtils.shouldDisableVersionManagement(manifest));
     }
 
     @Test
@@ -88,7 +88,7 @@ public class BundledOpenclawUtilsTest {
             "qqbot"
         );
 
-        assertTrue(BundledOpenclawUtils.shouldDisableUpdateManagement(manifest));
+        assertFalse(BundledOpenclawUtils.shouldDisableUpdateManagement(manifest));
     }
 
     @Test

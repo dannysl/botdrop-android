@@ -159,7 +159,7 @@ public class BotDropServiceTest {
     }
 
     @Test
-    public void testFindOpenclawVersion_prefersBundledRuntimeOverLegacyGlobalInstall() throws Exception {
+    public void testFindOpenclawVersion_returnsFirstAvailableCandidate() throws Exception {
         File tempDir = new File(RuntimeEnvironment.getApplication().getCacheDir(), "openclaw-version-test");
         assertTrue(tempDir.mkdirs() || tempDir.isDirectory());
 
@@ -168,7 +168,7 @@ public class BotDropServiceTest {
         writePackageJsonVersion(bundled, "2026.3.13");
         writePackageJsonVersion(legacy, "2026.2.6");
 
-        assertEquals("2026.3.13", BotDropService.findOpenclawVersion(bundled, legacy));
+        assertEquals("2026.2.6", BotDropService.findOpenclawVersion(legacy, bundled));
     }
 
     @Test

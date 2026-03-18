@@ -16,7 +16,7 @@ public class OpenclawModelListUtilsTest {
         assertTrue(command.contains("for candidate in \\"));
         assertTrue(command.contains(
             "$PREFIX/lib/node_modules/openclaw/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
-        assertTrue(command.contains(
+        assertFalse(command.contains(
             "$PREFIX/share/botdrop/openclaw-runtime/current/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js"));
         assertTrue(command.contains("if [ -f \"$candidate\" ]; then"));
         assertTrue(command.contains("model_registry_js=\"$candidate\""));
