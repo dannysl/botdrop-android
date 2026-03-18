@@ -49,6 +49,7 @@ public class InstallFragment extends Fragment {
     private TextView mStep0Icon, mStep0Text;
     private TextView mStep1Icon, mStep1Text;
     private TextView mStep2Icon, mStep2Text;
+    private TextView mStep0Percent, mStep1Percent, mStep2Percent;
 
     private TextView mStatusMessage;
     private View mErrorContainer;
@@ -103,6 +104,9 @@ public class InstallFragment extends Fragment {
         mStep1Text = view.findViewById(R.id.install_step_1_text);
         mStep2Icon = view.findViewById(R.id.install_step_2_icon);
         mStep2Text = view.findViewById(R.id.install_step_2_text);
+        mStep0Percent = view.findViewById(R.id.install_step_0_percent);
+        mStep1Percent = view.findViewById(R.id.install_step_1_percent);
+        mStep2Percent = view.findViewById(R.id.install_step_2_percent);
 
         mStatusMessage = view.findViewById(R.id.install_status_message);
         mErrorContainer = view.findViewById(R.id.install_error_container);
@@ -393,19 +397,23 @@ public class InstallFragment extends Fragment {
     private void updateStep(int step, String icon, String text, boolean complete) {
         TextView iconView = null;
         TextView textView = null;
+        TextView percentView = null;
 
         switch (step) {
             case 0:
                 iconView = mStep0Icon;
                 textView = mStep0Text;
+                percentView = mStep0Percent;
                 break;
             case 1:
                 iconView = mStep1Icon;
                 textView = mStep1Text;
+                percentView = mStep1Percent;
                 break;
             case 2:
                 iconView = mStep2Icon;
                 textView = mStep2Text;
+                percentView = mStep2Percent;
                 break;
         }
 
@@ -414,7 +422,12 @@ public class InstallFragment extends Fragment {
         }
 
         if (textView != null && text != null) {
-            textView.setText(text);
+            textView.setText(StepPercentUtils.stripTrailingPercentText(text));
+        }
+
+        if (percentView != null) {
+            int percent = complete ? 100 : StepPercentUtils.extractPercent(text, 0);
+            percentView.setText(StepPercentUtils.formatPercent(percent));
         }
     }
 
@@ -429,6 +442,9 @@ public class InstallFragment extends Fragment {
         mStep0Icon.setText("○");
         mStep1Icon.setText("○");
         mStep2Icon.setText("○");
+        mStep0Percent.setText(StepPercentUtils.formatPercent(0));
+        mStep1Percent.setText(StepPercentUtils.formatPercent(0));
+        mStep2Percent.setText(StepPercentUtils.formatPercent(0));
         mStatusMessage.setText(getString(R.string.botdrop_takes_about_a_minute));
         mInstallationStarted.set(false);
     }

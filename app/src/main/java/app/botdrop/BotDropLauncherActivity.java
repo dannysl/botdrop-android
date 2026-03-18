@@ -14,7 +14,6 @@ import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationManagerCompat;
@@ -55,7 +54,6 @@ public class BotDropLauncherActivity extends Activity {
     private Button mBatteryButton;
     private Button mBackgroundSettingsButton;
     private Button mContinueButton;
-    private Button mCheckUpdateButton;
     private TextView mNotificationStatus;
     private TextView mBatteryStatus;
     private TextView mBackgroundHintText;
@@ -77,7 +75,6 @@ public class BotDropLauncherActivity extends Activity {
         mBatteryButton = findViewById(R.id.btn_battery_permission);
         mBackgroundSettingsButton = findViewById(R.id.btn_background_settings);
         mContinueButton = findViewById(R.id.btn_continue);
-        mCheckUpdateButton = findViewById(R.id.btn_check_update);
         mNotificationStatus = findViewById(R.id.notification_status);
         mBatteryStatus = findViewById(R.id.battery_status);
         mBackgroundHintText = findViewById(R.id.background_hint_text);
@@ -106,14 +103,6 @@ public class BotDropLauncherActivity extends Activity {
             AnalyticsManager.logEvent(this, "launcher_background_tap");
             openAdvancedBackgroundSettings();
         });
-        if (mCheckUpdateButton != null && mUpdateManagementDisabled) {
-            mCheckUpdateButton.setVisibility(View.GONE);
-        } else if (mCheckUpdateButton != null) {
-            mCheckUpdateButton.setOnClickListener(v -> {
-                AnalyticsManager.logEvent(this, "launcher_update_check_tap");
-                checkUpdateManually();
-            });
-        }
         mContinueButton.setOnClickListener(v -> {
             AnalyticsManager.logEvent(this, "launcher_continue_tap");
             mPermissionsPhaseComplete = true;
@@ -338,26 +327,6 @@ public class BotDropLauncherActivity extends Activity {
 
         // Enable continue when both handled
         mContinueButton.setEnabled(notifGranted && batteryExempt);
-    }
-
-    private void checkUpdateManually() {
-        if (mUpdateManagementDisabled || mCheckUpdateButton == null) {
-            return;
-        }
-        mCheckUpdateButton.setEnabled(false);
-        mCheckUpdateButton.setText(R.string.botdrop_checking_updates);
-
-        UpdateChecker.forceCheckWithFeedback(this, (updateAvailable, latestVersion, downloadUrl, notes, message) -> {
-            mCheckUpdateButton.setEnabled(true);
-            mCheckUpdateButton.setText(R.string.botdrop_check_update);
-            if (message != null && !message.isEmpty()) {
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-            } else if (updateAvailable) {
-                Toast.makeText(this, getString(R.string.botdrop_update_available_version, latestVersion), Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, getString(R.string.botdrop_no_update_available), Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 
     // --- Routing ---

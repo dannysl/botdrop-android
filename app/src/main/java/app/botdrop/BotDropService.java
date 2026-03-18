@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -306,7 +307,16 @@ public class BotDropService extends Service {
             );
         }
 
-        return executeCommandViaLocal(safeCommand, timeoutSeconds);
+        return executeCommandViaLocal(safeCommand, timeoutSeconds, null);
+    }
+
+    private CommandResult executeCommandSync(String command, int timeoutSeconds, Consumer<String> lineConsumer) {
+        String safeCommand = command == null ? "" : command.trim();
+        if (safeCommand.isEmpty()) {
+            return new CommandResult(false, "", "Command is empty", -1);
+        }
+
+        return executeCommandViaLocal(safeCommand, timeoutSeconds, lineConsumer);
     }
 
     private boolean shouldExecuteViaShizuku(String command) {
@@ -353,7 +363,7 @@ public class BotDropService extends Service {
         return shizukuUnavailableMessage();
     }
 
-    private CommandResult executeCommandViaLocal(String safeCommand, int timeoutSeconds) {
+    private CommandResult executeCommandViaLocal(String safeCommand, int timeoutSeconds, Consumer<String> lineConsumer) {
         StringBuilder stdout = new StringBuilder();
         StringBuilder stderr = new StringBuilder();
         int exitCode = -1;
@@ -403,6 +413,9 @@ public class BotDropService extends Service {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     stdout.append(line).append("\n");
+                    if (lineConsumer != null) {
+                        lineConsumer.accept(line);
+                    }
                     if (!isModelListCommand || loggedLines < MAX_VERBOSE_LINES) {
                         Logger.logVerbose(LOG_TAG, "stdout: " + line);
                         loggedLines++;
@@ -568,9 +581,19 @@ public class BotDropService extends Service {
                 try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream())
                 )) {
+                    final int[] installPercent = {-1};
                     String line;
                     while ((line = reader.readLine()) != null) {
                         Logger.logVerbose(LOG_TAG, "install.sh: " + line);
+                        int nextPercent = NpmInstallProgressParser.resolvePercent(line, installPercent[0]);
+                        if (nextPercent > installPercent[0]) {
+                            installPercent[0] = nextPercent;
+                            int finalPercent = nextPercent;
+                            mHandler.post(() -> callback.onStepStart(
+                                2,
+                                "Installing OpenClaw " + finalPercent + "%"
+                            ));
+                        }
                         parseInstallOutput(line, callback);
                         recentLines.add(line);
                         if (recentLines.size() > MAX_RECENT) recentLines.remove(0);
@@ -637,7 +660,6 @@ public class BotDropService extends Service {
             String error = line.substring("BOTDROP_ERROR:".length());
             mHandler.post(() -> callback.onError(error));
         }
-        // Other lines (npm output, etc.) are logged but not parsed
     }
 
     /**
@@ -1019,8 +1041,15 @@ public class BotDropService extends Service {
                     + "export PATH=$PREFIX/bin:$PATH\n"
                     + "export TMPDIR=$PREFIX/tmp\n"
                     + "export SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem\n"
-                    + OpenclawVersionUtils.buildNpmInstallCommand(packageVersion, oldSpaceMb) + " 2>&1\n";
-                CommandResult npmResult = executeCommandSync(npmCmd, 300);
+                    + OpenclawVersionUtils.buildNpmInstallCommand(packageVersion, oldSpaceMb) + " --timing 2>&1\n";
+                final int[] npmPercent = {0};
+                CommandResult npmResult = executeCommandSync(npmCmd, 300, line -> {
+                    int nextPercent = NpmInstallProgressParser.resolvePercent(line, npmPercent[0]);
+                    if (nextPercent > npmPercent[0]) {
+                        npmPercent[0] = nextPercent;
+                        notifyUpdateStep(callback, "Installing update... " + nextPercent + "%");
+                    }
+                });
                 if (!npmResult.success) {
                     String tail = extractTail(npmResult.stdout, 15);
                     String error = "npm install failed (exit " + npmResult.exitCode + ")\n" + tail;

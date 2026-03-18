@@ -11,15 +11,6 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <!-- Header -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/botdrop_step_2_4_with_back"
-            android:textSize="14sp"
-            android:textColor="@color/botdrop_secondary_text"
-            android:layout_marginBottom="16dp" />
-
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -125,8 +116,9 @@
                         android:id="@+id/auth_key_toggle_visibility"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:src="@android:drawable/ic_menu_view"
+                        android:src="@drawable/ic_visibility"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
+                        android:tint="@color/botdrop_secondary_text"
                         android:contentDescription="@string/botdrop_toggle_visibility" />
 
             </LinearLayout>

@@ -79,7 +79,6 @@ public class ModelSelectorDialog extends Dialog {
     private ModelSelectedCallback mCallback;
 
     private TextView mTitleText;
-    private TextView mStepHint;
     private ImageButton mBackButton;
     private EditText mSearchBox;
     private RecyclerView mModelList;
@@ -185,7 +184,6 @@ public class ModelSelectorDialog extends Dialog {
         }
 
         mTitleText = findViewById(R.id.model_title);
-        mStepHint = findViewById(R.id.model_step_hint);
         mBackButton = findViewById(R.id.model_back_button);
         mSearchBox = findViewById(R.id.model_search);
         mModelList = findViewById(R.id.model_list);
@@ -1025,7 +1023,7 @@ public class ModelSelectorDialog extends Dialog {
             });
 
             ImageButton deleteAction = new ImageButton(getContext());
-            deleteAction.setImageResource(android.R.drawable.ic_menu_delete);
+            deleteAction.setImageResource(R.drawable.ic_delete);
             deleteAction.setContentDescription(getDialogText(R.string.botdrop_delete_cached_key));
             deleteAction.setColorFilter(getContext().getColor(R.color.status_disconnected));
             deleteAction.setBackgroundResource(android.R.color.transparent);
@@ -1466,9 +1464,6 @@ public class ModelSelectorDialog extends Dialog {
         mSearchBox.setText("");
         mSearchBox.setHint(getDialogText(R.string.botdrop_search_provider));
         mBackButton.setVisibility(View.GONE);
-        if (mStepHint != null) {
-            mStepHint.setText(getDialogText(R.string.botdrop_step_1_of_2));
-        }
         mTitleText.setText(getDialogText(R.string.botdrop_select_provider));
 
         mAdapter.updateList(mCurrentItems);
@@ -1573,9 +1568,6 @@ public class ModelSelectorDialog extends Dialog {
         mSearchBox.setText("");
         mSearchBox.setHint(getDialogText(R.string.botdrop_search_model));
         mBackButton.setVisibility(View.VISIBLE);
-        if (mStepHint != null) {
-            mStepHint.setText(getDialogText(R.string.botdrop_step_2_of_2));
-        }
         String providerName = isCustomProvider(provider) ? getDialogText(CUSTOM_PROVIDER_DISPLAY_NAME_RES) : provider;
         mTitleText.setText(getDialogText(R.string.botdrop_provider_models, providerName));
 

@@ -93,7 +93,6 @@ public class AgentSelectionFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         Button installButton = view.findViewById(R.id.agent_openclaw_install);
-        View versionManagerButton = view.findViewById(R.id.agent_openclaw_version_manager);
         mOpenclawVersionManagementDisabled = BundledOpenclawUtils.shouldDisableVersionManagement(
             BundledOpenclawUtils.loadManifest(requireContext())
         );
@@ -113,15 +112,6 @@ public class AgentSelectionFragment extends Fragment {
                 }
             }
         });
-
-        if (mOpenclawVersionManagementDisabled) {
-            versionManagerButton.setVisibility(View.GONE);
-        } else {
-            versionManagerButton.setOnClickListener(v -> {
-                AnalyticsManager.logEvent(requireContext(), "agent_version_manager_tap");
-                showOpenclawVersionListDialog();
-            });
-        }
 
         // URL click handlers
         view.findViewById(R.id.agent_openclaw_url).setOnClickListener(v -> {
@@ -403,7 +393,7 @@ public class AgentSelectionFragment extends Fragment {
                     mProgressDialog.setStatus(message);
                     return;
                 }
-                mProgressDialog.setStep(nextStep);
+                mProgressDialog.setStep(nextStep, message);
                 mProgressDialog.setStatus(message);
             }
 

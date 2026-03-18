@@ -1,7 +1,6 @@
 package app.botdrop;
 
 import android.content.Intent;
-import android.content.ActivityNotFoundException;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -54,7 +53,6 @@ import com.termux.shared.termux.TermuxConstants;
 public class SetupActivity extends AppCompatActivity {
 
     private static final String LOG_TAG = "SetupActivity";
-    private static final String BOTDROP_UPDATE_URL = "https://botdrop.app/";
     private static final int OPENCLAW_STORAGE_PERMISSION_REQUEST_CODE = 3002;
     private static final String OPENCLAW_BACKUP_DIRECTORY = "BotDrop/openclaw";
     private static final String OPENCLAW_BACKUP_FILE_PREFIX = "openclaw-config-backup-";
@@ -99,7 +97,6 @@ public class SetupActivity extends AppCompatActivity {
     private Button mNextButton;
     private Runnable mPendingOpenclawStorageAction;
     private Runnable mPendingOpenclawStorageDeniedAction;
-    private boolean mUpdateManagementDisabled;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,16 +107,6 @@ public class SetupActivity extends AppCompatActivity {
         mNavigationBar = findViewById(R.id.setup_navigation);
         mBackButton = findViewById(R.id.setup_button_back);
         mNextButton = findViewById(R.id.setup_button_next);
-        mUpdateManagementDisabled = BundledOpenclawUtils.shouldDisableUpdateManagement(this);
-        
-        // Setup Open Terminal button if it exists in layout
-        Button openTerminalBtn = findViewById(R.id.setup_open_terminal);
-        if (openTerminalBtn != null) {
-            openTerminalBtn.setOnClickListener(v -> {
-                AnalyticsManager.logEvent(this, "setup_terminal_tap", "step", getAnalyticsStepName(mViewPager.getCurrentItem()));
-                openTerminal();
-            });
-        }
 
         // Set up ViewPager2
         mAdapter = new SetupPagerAdapter(this);
@@ -162,44 +149,8 @@ public class SetupActivity extends AppCompatActivity {
             }
         });
 
-        // Setup manual update check button
-        Button checkUpdatesBtn = findViewById(R.id.setup_check_updates);
-        if (checkUpdatesBtn != null && mUpdateManagementDisabled) {
-            checkUpdatesBtn.setVisibility(View.GONE);
-        } else if (checkUpdatesBtn != null) {
-            checkUpdatesBtn.setOnClickListener(v -> {
-                AnalyticsManager.logEvent(this, "setup_update_check_tap", "step", getAnalyticsStepName(mViewPager.getCurrentItem()));
-                v.setEnabled(false);
-                UpdateChecker.forceCheck(this, (version, url, notes) -> {
-                    v.setEnabled(true);
-                    if (version != null && !version.isEmpty()) {
-                        new AlertDialog.Builder(this)
-                            .setTitle(getString(R.string.botdrop_update_update_available))
-                            .setMessage(getString(R.string.botdrop_update_update_message, version))
-                            .setPositiveButton(getString(R.string.botdrop_open_browser), (d, w) -> {
-                                AnalyticsManager.logEvent(this, "setup_update_open_browser");
-                                openBotdropUpdatePage();
-                            })
-                            .setNegativeButton(getString(R.string.botdrop_cancel), null)
-                            .show();
-                    } else {
-                        Toast.makeText(this, getString(R.string.botdrop_no_update_available), Toast.LENGTH_SHORT).show();
-                    }
-                });
-            });
-        }
-
         Logger.logDebug(LOG_TAG, "SetupActivity created, starting at step " + startStep);
 
-    }
-
-    private void openBotdropUpdatePage() {
-        try {
-            Intent browserIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(BOTDROP_UPDATE_URL));
-            startActivity(browserIntent);
-        } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, getString(R.string.botdrop_no_browser_app_found), Toast.LENGTH_SHORT).show();
-        }
     }
 
     /**

@@ -75,6 +75,15 @@
                 android:text="@string/botdrop_environment_ready"
                 android:textSize="14sp"
                 android:textColor="@color/botdrop_on_background" />
+
+            <TextView
+                android:id="@+id/install_step_0_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="0%"
+                android:textColor="@color/botdrop_secondary_text"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- Step 1: Verify Node -->
@@ -103,6 +112,15 @@
                 android:text="@string/botdrop_verifying_nodejs"
                 android:textSize="14sp"
                 android:textColor="@color/botdrop_on_background" />
+
+            <TextView
+                android:id="@+id/install_step_1_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="0%"
+                android:textColor="@color/botdrop_secondary_text"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- Step 2: Install OpenClaw -->
@@ -131,6 +149,15 @@
                 android:text="@string/botdrop_installing_openclaw"
                 android:textSize="14sp"
                 android:textColor="@color/botdrop_on_background" />
+
+            <TextView
+                android:id="@+id/install_step_2_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="0%"
+                android:textColor="@color/botdrop_secondary_text"
+                android:textSize="13sp" />
         </LinearLayout>
 
     </LinearLayout>
